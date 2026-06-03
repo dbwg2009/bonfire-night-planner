@@ -150,9 +150,13 @@ export default function Login() {
           )}
         </div>
 
-        <div className="mt-6">
+        <div className="mt-6 flex items-center justify-center gap-4">
           <a href="/" className="text-sm text-smoke-500 hover:text-smoke-300 transition-colors">
             ← Back to guest view
+          </a>
+          <span className="text-smoke-700">·</span>
+          <a href="/status" className="text-sm text-smoke-500 hover:text-smoke-300 transition-colors">
+            System status
           </a>
         </div>
       </div>

@@ -421,6 +421,55 @@ app.delete('/api/events/:eventId/finance/:id', requireAuth(async (c) => {
   return c.json({ success: true })
 }))
 
+// ─── Milestones ────────────────────────────────────────────────────────────────
+
+// Public endpoint — returns milestones + total contributions raised for the event
+app.get('/api/public/milestones/:eventId', async (c) => {
+  const eventId = c.req.param('eventId')
+  const [milestonesRes, totalRes] = await Promise.all([
+    c.env.DB.prepare("SELECT * FROM milestones WHERE event_id = ? ORDER BY amount ASC").bind(eventId).all(),
+    c.env.DB.prepare("SELECT COALESCE(SUM(actual_amount), 0) AS total FROM transactions WHERE event_id = ? AND transaction_type = 'contribution'").bind(eventId).first<{ total: number }>()
+  ])
+  return c.json({
+    milestones: milestonesRes.results.map(m => ({ ...m, important: (m as any).important === 1 })),
+    total_raised: Math.round((totalRes?.total ?? 0) * 100) // convert £ to pence
+  })
+})
+
+app.get('/api/events/:eventId/milestones', requireAuth(async (c) => {
+  const [milestonesRes, totalRes] = await Promise.all([
+    c.env.DB.prepare("SELECT * FROM milestones WHERE event_id = ? ORDER BY amount ASC").bind(c.req.param('eventId')).all(),
+    c.env.DB.prepare("SELECT COALESCE(SUM(actual_amount), 0) AS total FROM transactions WHERE event_id = ? AND transaction_type = 'contribution'").bind(c.req.param('eventId')).first<{ total: number }>()
+  ])
+  return c.json({
+    milestones: milestonesRes.results.map(m => ({ ...m, important: (m as any).important === 1 })),
+    total_raised: Math.round((totalRes?.total ?? 0) * 100)
+  })
+}))
+
+app.post('/api/events/:eventId/milestones', requireAuth(async (c) => {
+  const body = await c.req.json()
+  await c.env.DB.prepare(
+    'INSERT INTO milestones (id, event_id, name, description, amount, emoji, icon_preset, icon_image, important) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(body.id, c.req.param('eventId'), body.name, body.description ?? '', body.amount, body.emoji ?? '', body.icon_preset ?? '', body.icon_image ?? '', body.important ? 1 : 0).run()
+  const m = await c.env.DB.prepare('SELECT * FROM milestones WHERE id = ?').bind(body.id).first()
+  return c.json({ ...m, important: (m as any).important === 1 })
+}))
+
+app.put('/api/events/:eventId/milestones/:id', requireAuth(async (c) => {
+  const body = await c.req.json()
+  await c.env.DB.prepare(
+    'UPDATE milestones SET name=?, description=?, amount=?, emoji=?, icon_preset=?, icon_image=?, important=?, updated_at=datetime("now") WHERE id=? AND event_id=?'
+  ).bind(body.name, body.description ?? '', body.amount, body.emoji ?? '', body.icon_preset ?? '', body.icon_image ?? '', body.important ? 1 : 0, c.req.param('id'), c.req.param('eventId')).run()
+  const m = await c.env.DB.prepare('SELECT * FROM milestones WHERE id = ?').bind(c.req.param('id')).first()
+  return c.json({ ...m, important: (m as any).important === 1 })
+}))
+
+app.delete('/api/events/:eventId/milestones/:id', requireAuth(async (c) => {
+  await c.env.DB.prepare('DELETE FROM milestones WHERE id = ? AND event_id = ?').bind(c.req.param('id'), c.req.param('eventId')).run()
+  return c.json({ success: true })
+}))
+
 // ─── Locations ─────────────────────────────────────────────────────────────────
 
 app.get('/api/events/:eventId/locations', requireAuth(async (c) => {

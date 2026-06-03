@@ -194,6 +194,25 @@ export interface AuthState {
   token: string | null
 }
 
+export interface Milestone {
+  id: string
+  event_id: string
+  name: string
+  description: string
+  amount: number        // cumulative target in pence
+  emoji: string
+  icon_preset: string
+  icon_image: string    // base64
+  important: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface MilestonesResponse {
+  milestones: Milestone[]
+  total_raised: number  // in pence
+}
+
 export interface ApiResponse<T> {
   data?: T
   error?: string

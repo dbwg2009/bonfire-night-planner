@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, Shield } from 'lucide-react'
+import { MilestoneAdmin } from '../../components/MilestoneAdmin'
 import { Card } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
@@ -239,6 +240,9 @@ export default function Settings() {
         >
           {saveEvent.isPending ? 'Saving…' : 'Save Event Settings'}
         </Button>
+
+        {/* Milestones */}
+        {event?.id && <MilestoneAdmin eventId={event.id} />}
 
         {/* Organisers */}
         <div className="flex items-center justify-between pt-2">

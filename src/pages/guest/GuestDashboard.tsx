@@ -1,30 +1,36 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Calendar, MapPin, Clock, AlertCircle, Loader2 } from 'lucide-react'
 import { Card } from '../../components/ui/card'
 import { Countdown } from '../../components/Countdown'
 import { WeatherWidget } from '../../components/WeatherWidget'
 import { FireBackground } from '../../components/FireBackground'
+import { MilestoneBar } from '../../components/MilestoneBar'
 import { Toaster } from '../../components/ui/toast'
 import { formatDate, formatTime, getBonfireDate } from '../../lib/utils'
-import type { Event, Guest } from '../../lib/types'
+import type { Event, Guest, MilestonesResponse } from '../../lib/types'
 
 type PublicGuest = Pick<Guest, 'id' | 'name' | 'rsvp_status' | 'dietary' | 'pickup_time'>
 
 export default function GuestDashboard() {
   const [event, setEvent] = useState<Event | null>(null)
   const [myGuest, setMyGuest] = useState<PublicGuest | null>(null)
+  const [milestones, setMilestones] = useState<MilestonesResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
 
   // Guest ID from URL param — share links like /?guest=GUEST_ID
   const guestId = new URLSearchParams(window.location.search).get('guest')
 
   useEffect(() => {
     async function load() {
+      let loadedEventId: string | null = null
       try {
         const eventRes = await fetch('/api/public/event')
         if (eventRes.ok) {
           const data = await eventRes.json() as Event
           setEvent(data)
+          loadedEventId = data.id
         }
       } catch { /* offline or no event yet */ }
 
@@ -33,6 +39,13 @@ export default function GuestDashboard() {
           const guestRes = await fetch(`/api/public/guest/${guestId}`)
           if (guestRes.ok) setMyGuest(await guestRes.json() as PublicGuest)
         } catch { /* guest not found */ }
+      }
+
+      if (loadedEventId) {
+        try {
+          const mRes = await fetch(`/api/public/milestones/${loadedEventId}`)
+          if (mRes.ok) setMilestones(await mRes.json() as MilestonesResponse)
+        } catch { /* no milestones */ }
       }
 
       setLoading(false)
@@ -124,6 +137,31 @@ export default function GuestDashboard() {
 
           {/* Weather */}
           <WeatherWidget eventDate={bonfireDate} compact />
+
+          {/* Milestone bar */}
+          {milestones && milestones.milestones.length > 0 && (
+            <Card>
+              <MilestoneBar
+                milestones={milestones.milestones}
+                totalRaisedPence={milestones.total_raised}
+                compact
+              />
+            </Card>
+          )}
+
+          {/* View full tracker card */}
+          {milestones && milestones.milestones.length > 0 && (
+            <Card
+              className="flex items-center justify-between cursor-pointer hover:border-fire-400/30 transition-colors tap-highlight-none"
+              onClick={() => navigate('/tracker')}
+            >
+              <div>
+                <p className="text-sm font-semibold text-smoke-100">Milestone Tracker</p>
+                <p className="text-xs text-smoke-400">See every reward and how close we are</p>
+              </div>
+              <span className="text-fire-400 text-sm">→</span>
+            </Card>
+          )}
 
           {/* Contribution */}
           {event?.contribution_link && (

@@ -132,6 +132,15 @@ export const api = {
   deleteConflictItem: (eventId: string, id: string) =>
     request<unknown>(`/events/${eventId}/conflict-schedule/${id}`, { method: 'DELETE' }),
 
+  // Milestones (admin)
+  getMilestones: (eventId: string) => request<unknown>(`/events/${eventId}/milestones`),
+  createMilestone: (eventId: string, data: unknown) =>
+    request<unknown>(`/events/${eventId}/milestones`, { method: 'POST', body: JSON.stringify(data) }),
+  updateMilestone: (eventId: string, id: string, data: unknown) =>
+    request<unknown>(`/events/${eventId}/milestones/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteMilestone: (eventId: string, id: string) =>
+    request<unknown>(`/events/${eventId}/milestones/${id}`, { method: 'DELETE' }),
+
   // Organisers
   getOrganisers: (eventId: string) => request<unknown[]>(`/events/${eventId}/organisers`),
   createOrganiser: (eventId: string, data: unknown) =>

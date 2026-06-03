@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Delete, Check } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
+import { useEventStore } from '../store/event'
 import { api } from '../lib/api'
 import { FireBackground } from '../components/FireBackground'
 import { cn } from '../lib/utils'
 import { toast } from '../components/ui/toast'
 import { Toaster } from '../components/ui/toast'
-import type { Organiser } from '../lib/types'
+import type { Organiser, Event } from '../lib/types'
 
 const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫']
 const MAX_PIN = 6
@@ -19,6 +20,8 @@ export default function Login() {
   const [shake, setShake] = useState(false)
   const navigate = useNavigate()
   const login = useAuthStore(s => s.login)
+  const setCurrentEvent = useEventStore(s => s.setCurrentEvent)
+  const setEvents = useEventStore(s => s.setEvents)
 
   function press(key: string) {
     if (loading) return
@@ -40,6 +43,16 @@ export default function Login() {
     try {
       const res = await api.login(pinValue) as { token: string; organiser: Organiser }
       login(res.organiser, res.token)
+      // Load the organiser's existing event so we go straight to the dashboard
+      // instead of being forced onto the Create Event screen when one exists.
+      try {
+        const events = await api.getEvents() as Event[]
+        setEvents(events)
+        const chosen =
+          events.find(e => e.id === res.organiser.event_id) ??
+          [...events].filter(e => e.status !== 'archived').sort((a, b) => b.year - a.year)[0]
+        if (chosen) setCurrentEvent(chosen)
+      } catch { /* no events yet — the setup screen will handle creation */ }
       navigate('/admin')
     } catch {
       setShake(true)

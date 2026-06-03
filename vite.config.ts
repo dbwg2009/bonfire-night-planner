@@ -9,19 +9,14 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      // Self-destroying SW: replaces any previously-installed service worker
-      // with one that unregisters itself and clears all caches. This frees
-      // clients trapped on a stale precached bundle (which was masking deploys).
-      // Remove this flag to re-enable PWA/offline support once clients recover.
-      selfDestroying: true,
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png'],
       manifest: {
         name: 'Bonfire Night Planner',
         short_name: 'Bonfire Night',
         description: 'Plan your annual Bonfire Night event',
-        theme_color: '#0a0a0a',
-        background_color: '#0a0a0a',
+        theme_color: '#0a0500',
+        background_color: '#0a0500',
         display: 'standalone',
         orientation: 'portrait',
         icons: [

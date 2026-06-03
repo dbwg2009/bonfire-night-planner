@@ -179,3 +179,17 @@
   background-size: 200% 100%;
   animation: shimmer 2s infinite;
 }
+
+/* Light mode text contrast.
+   The smoke-100..400 shades are pale greys tuned for a dark background; on the
+   light cream background they are washed out or invisible. Remap just those
+   text shades to readable dark values for light mode. Left unlayered so it wins
+   over the @theme defaults. smoke-500/600 are already dark enough to read. */
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-smoke-100: #1a1613; /* primary headings */
+    --color-smoke-200: #2b2521; /* strong text */
+    --color-smoke-300: #443d36; /* secondary text */
+    --color-smoke-400: #5f564e; /* muted labels */
+  }
+}

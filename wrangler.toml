@@ -1,0 +1,13 @@
+name = "bonfire-night-planner"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+pages_build_output_dir = "./dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bonfire-night-db"
+database_id = "placeholder-will-be-set-after-wrangler-d1-create"
+
+[vars]
+JWT_SECRET = "change-this-to-a-secure-random-string-in-production"

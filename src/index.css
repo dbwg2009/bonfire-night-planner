@@ -1,0 +1,181 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --color-fire-950: #0a0500;
+  --color-fire-900: #1a0a00;
+  --color-fire-800: #2d1200;
+  --color-fire-700: #4a1e00;
+  --color-fire-600: #7a3000;
+  --color-fire-500: #c24800;
+  --color-fire-400: #e85f00;
+  --color-fire-300: #f27820;
+  --color-fire-200: #f5a050;
+  --color-fire-100: #fad0a0;
+  --color-fire-50: #fff5e8;
+  --color-ember-400: #ff6b00;
+  --color-ember-300: #ff8c2a;
+  --color-ember-200: #ffb366;
+  --color-ember-100: #ffd9aa;
+  --color-smoke-950: #080808;
+  --color-smoke-900: #121212;
+  --color-smoke-800: #1e1e1e;
+  --color-smoke-700: #2a2a2a;
+  --color-smoke-600: #3a3a3a;
+  --color-smoke-500: #555555;
+  --color-smoke-400: #787878;
+  --color-smoke-300: #a0a0a0;
+  --color-smoke-200: #c8c8c8;
+  --color-smoke-100: #e8e8e8;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --radius-glass: 1rem;
+}
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    height: 100%;
+  }
+
+  body {
+    font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+    background: #0a0500;
+    color: #e8e8e8;
+    min-height: 100dvh;
+    min-height: 100vh;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #root {
+    min-height: 100dvh;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  :root { color-scheme: dark; }
+
+  @media (prefers-color-scheme: light) {
+    body { background: #faf5f0; color: #1a0a00; }
+    :root { color-scheme: light; }
+  }
+
+  input, textarea, select, button { font-family: inherit; }
+}
+
+@layer utilities {
+  .glass {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .glass-warm {
+    background: rgba(194, 72, 0, 0.08);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(232, 95, 0, 0.2);
+  }
+
+  .glass-card {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 1rem;
+  }
+
+  @media (prefers-color-scheme: light) {
+    .glass {
+      background: rgba(255, 255, 255, 0.65);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(194, 72, 0, 0.15);
+    }
+    .glass-warm {
+      background: rgba(255, 200, 100, 0.12);
+      border: 1px solid rgba(194, 72, 0, 0.25);
+    }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.75);
+      border: 1px solid rgba(194, 72, 0, 0.12);
+    }
+  }
+
+  .text-gradient-fire {
+    background: linear-gradient(135deg, #ff8c2a 0%, #e85f00 50%, #c24800 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .glow-fire { box-shadow: 0 0 20px rgba(232, 95, 0, 0.35), 0 0 60px rgba(194, 72, 0, 0.12); }
+  .glow-fire-sm { box-shadow: 0 0 8px rgba(232, 95, 0, 0.45); }
+
+  .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 0.5rem); }
+  .safe-top { padding-top: env(safe-area-inset-top); }
+
+  .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+
+  .tap-highlight-none { -webkit-tap-highlight-color: transparent; }
+}
+
+@keyframes ember-float {
+  0%   { transform: translateY(0) translateX(0) scale(1); opacity: 0.9; }
+  30%  { transform: translateY(-40px) translateX(8px) scale(0.8); opacity: 0.6; }
+  60%  { transform: translateY(-80px) translateX(-4px) scale(0.55); opacity: 0.35; }
+  100% { transform: translateY(-130px) translateX(5px) scale(0.1); opacity: 0; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(24px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fire-flicker {
+  0%, 100% { transform: scaleY(1) scaleX(1); }
+  25% { transform: scaleY(1.04) scaleX(0.98); }
+  50% { transform: scaleY(0.97) scaleX(1.02); }
+  75% { transform: scaleY(1.02) scaleX(0.99); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-ember      { animation: ember-float var(--duration, 3s) ease-out forwards; }
+.animate-pulse-glow { animation: pulse-glow 2.5s ease-in-out infinite; }
+.animate-slide-up   { animation: slide-up 0.4s cubic-bezier(0.16,1,0.3,1) forwards; }
+.animate-slide-in   { animation: slide-in-right 0.35s cubic-bezier(0.16,1,0.3,1) forwards; }
+.animate-fade-in    { animation: fade-in 0.3s ease-out forwards; }
+.animate-flicker    { animation: fire-flicker 1.5s ease-in-out infinite; }
+
+.shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}

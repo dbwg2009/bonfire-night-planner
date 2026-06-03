@@ -1,73 +1,102 @@
-# React + TypeScript + Vite
+# 🔥 Bonfire Night Planner
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A fully tailored mobile-first web app for planning an annual Bonfire Night event. Built with React, Vite, Cloudflare Pages, and Cloudflare D1.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Guest management** — RSVP tracking, dietary preferences, pick-up scheduling, emergency contacts
+- **PIN-based admin login** — Square-style keypad, custom roles per co-organiser
+- **Live check-in register** — Tap to check guests in at meeting point and destination
+- **Smart food calculator** — Weighted algorithm with configurable split ratio and buffer
+- **Finance tracker** — Contributions and expenses with budget vs actual
+- **Tasks** — Full to-do list with stages, owners and due dates
+- **Schedule** — Evening timeline with activity types and map links
+- **Venue locations** — Compare potential venues with pros/cons, permissions, logistics
+- **Conflicting event planner** — Sub-event scheduling (e.g. school production on the same night)
+- **Weather widget** — Met Office + Open-Meteo cross-referenced, with light levels (golden hour, sunset, full dark)
+- **WhatsApp copy** — One-tap formatted messages for pick-ups, RSVP summary, shopping list, event info
+- **Full PWA** — Install to home screen, fire/ember particle animations
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Frontend**: React 19 + Vite + TypeScript + Tailwind CSS v4
+- **UI**: Custom glassmorphism components (shadcn/ui patterns + Radix UI primitives)
+- **Routing**: React Router v7
+- **State**: TanStack Query + Zustand (with persistence)
+- **API**: Hono on Cloudflare Pages Functions
+- **Database**: Cloudflare D1 (SQLite at the edge)
+- **Auth**: PIN-based with SHA-256 hashing + JWT tokens
+- **PWA**: vite-plugin-pwa + Workbox
 
-## Expanding the ESLint configuration
+## Deployment
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 1. Install Wrangler
+```bash
+npm install -g wrangler
+wrangler login
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### 2. Create D1 database
+```bash
+cd bonfire-night-planner
+npm run db:create
+```
+Copy the `database_id` from the output and paste it into `wrangler.toml` replacing the placeholder.
 
+### 3. Run migrations
+```bash
+npm run db:migrate:prod
+```
+
+### 4. Connect to Cloudflare Pages
+1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **Create** → **Pages** → **Connect to Git**
+2. Select the `bonfire-night-planner` repository
+3. Build settings:
+   - **Framework**: Vite
+   - **Build command**: `npm run build`
+   - **Output directory**: `dist`
+4. Add environment variables:
+   - `JWT_SECRET` — a long random string (run `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`)
+   - `MET_OFFICE_API_KEY` — your Met Office DataPoint API key (get free at metoffice.gov.uk/services/data/datapoint)
+5. Deploy
+
+### 5. Bind D1 to Pages
+After the first deploy:
+1. Pages project → **Settings** → **Functions** → **D1 database bindings**
+2. Variable name: `DB`, Database: `bonfire-night-db`
+3. Redeploy (any new push will trigger this)
+
+### 6. Seed your first event and owner account
+Run these in your terminal (replace values as needed):
+
+```bash
+# Create the 2026 event
+wrangler d1 execute bonfire-night-db --remote --command \
+  "INSERT INTO events (id,year,name,date,status,meeting_location,event_location,food_split_ratio,food_buffer_factor) VALUES ('evt-2026',2026,'Bonfire Night 2026','2026-11-05','planning','21 Agincourt Square','TBC',0.6,1.1)"
+
+# Create your owner account (replace PIN_HASH with the hash of your PIN)
+wrangler d1 execute bonfire-night-db --remote --command \
+  "INSERT INTO organisers (id,name,pin_hash,color,is_owner,permissions,event_id) VALUES ('org-owner','Daniel','PIN_HASH_HERE','#e85f00',1,'{\"guest_management\":true,\"finance\":true,\"check_in\":true,\"tasks_and_settings\":true}','evt-2026')"
+```
+
+To generate your PIN hash, open the browser console on your deployed site and run:
 ```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+const h = await (async p => {
+  const d = new TextEncoder().encode(p + 'bonfire-salt-v1')
+  const hash = await crypto.subtle.digest('SHA-256', d)
+  return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2,'0')).join('')
+})('YOUR_PIN')
+```
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Local development
+
+```bash
+npm install
+npm run dev        # Frontend only (API calls will fail — no local D1)
+```
+
+For full local dev with the API:
+```bash
+npm run db:migrate  # Run migrations against local D1
+npm run pages:dev   # Cloudflare Pages dev server with D1 binding
 ```

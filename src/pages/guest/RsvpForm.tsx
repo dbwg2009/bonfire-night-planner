@@ -39,7 +39,7 @@ const COMMON_RESTRICTIONS = [
 
 export default function RsvpForm() {
   const storeEvent = useEventStore(s => s.currentEvent)
-  const [publicEvent, setPublicEvent] = useState<{ id: string; contribution_link?: string; contribution_match_ratio: number } | null>(null)
+  const [publicEvent, setPublicEvent] = useState<{ id: string; name?: string; contribution_link?: string; contribution_match_ratio: number } | null>(null)
   const [step, setStep] = useState<'form' | 'done'>('form')
   const [loading, setLoading] = useState(false)
   const copyVariant = useRef(Math.floor(Math.random() * CONTRIBUTION_COPY.length))

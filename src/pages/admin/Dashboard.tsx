@@ -125,7 +125,14 @@ export default function Dashboard() {
         </div>
 
         {/* Weather */}
-        <WeatherWidget eventDate={bonfireDate} />
+        <WeatherWidget
+          eventDate={bonfireDate}
+          lat={event?.lat}
+          lon={event?.lon}
+          walkByOverride={event?.light_walk_by}
+          fireworksOverride={event?.light_fireworks_after}
+          lightNotes={event?.light_notes}
+        />
       </PageContent>
     </div>
   )

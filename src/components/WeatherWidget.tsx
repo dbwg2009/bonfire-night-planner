@@ -30,6 +30,9 @@ interface WeatherWidgetProps {
   lon?: number
   eventDate: Date
   compact?: boolean
+  walkByOverride?: string       // Manual "start walk by" time from event settings
+  fireworksOverride?: string    // Manual "fireworks after" time from event settings
+  lightNotes?: string           // Custom notes from event settings
 }
 
 const DEFAULT_LAT = 51.822
@@ -59,7 +62,7 @@ function getWeatherIcon(desc: string): string {
   return '🌤️'
 }
 
-export function WeatherWidget({ lat = DEFAULT_LAT, lon = DEFAULT_LON, eventDate, compact = false }: WeatherWidgetProps) {
+export function WeatherWidget({ lat = DEFAULT_LAT, lon = DEFAULT_LON, eventDate, compact = false, walkByOverride, fireworksOverride, lightNotes }: WeatherWidgetProps) {
   const [weather, setWeather] = useState<WeatherResult | null>(null)
   const [sunData, setSunData] = useState<SunData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -127,17 +130,35 @@ export function WeatherWidget({ lat = DEFAULT_LAT, lon = DEFAULT_LON, eventDate,
           value={weather ? `${weather.wind_speed} km/h` : '–'} />
       </div>
 
-      {/* Light levels — always calculated from SunCalc, no API needed */}
+      {/* Light levels — calculated from SunCalc, with optional manual overrides */}
       {sunData && (
         <div className="border-t border-white/5 pt-3">
-          <p className="text-xs font-medium text-smoke-400 uppercase tracking-wider mb-2">Light levels</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-smoke-400 uppercase tracking-wider">Light levels</p>
+            <p className="text-[10px] text-smoke-600">Set precise times in Settings</p>
+          </div>
           <div className="space-y-1.5">
             <LightRow icon={<Sun size={12} className="text-amber-400" />} label="Sunrise" time={sunData.sunrise} />
-            <LightRow icon={<Sun size={12} className="text-orange-400" />} label="Golden hour starts" time={sunData.goldenHourStart} />
+            <LightRow icon={<Sun size={12} className="text-orange-400" />} label="Golden hour" time={sunData.goldenHourStart} />
             <LightRow icon={<Sun size={12} className="text-fire-400" />} label="Sunset" time={sunData.sunset} />
-            <LightRow icon={<Moon size={12} className="text-indigo-400" />} label="Civil dusk" time={sunData.civilTwilightEnd} note="Start walk by here" />
-            <LightRow icon={<Moon size={12} className="text-purple-400" />} label="Full dark" time={sunData.nauticalTwilightEnd} note="🎆 Good for fireworks" highlight />
+            <LightRow icon={<Moon size={12} className="text-indigo-400" />} label="Civil dusk" time={sunData.civilTwilightEnd}
+              note={walkByOverride ? `⚑ Start walk by ${formatTime(walkByOverride)}` : 'Start walk by here'} />
+            <LightRow icon={<Moon size={12} className="text-purple-400" />} label="Full dark" time={sunData.nauticalTwilightEnd}
+              note={fireworksOverride ? `🎆 Fireworks after ${formatTime(fireworksOverride)}` : '🎆 Good for fireworks'} highlight />
           </div>
+          {(walkByOverride || fireworksOverride) && (
+            <div className="mt-2 space-y-1">
+              {walkByOverride && (
+                <p className="text-xs text-fire-400 font-medium">⚑ Walk starts by {formatTime(walkByOverride)}</p>
+              )}
+              {fireworksOverride && (
+                <p className="text-xs text-purple-400 font-medium">🎆 Fireworks planned after {formatTime(fireworksOverride)}</p>
+              )}
+            </div>
+          )}
+          {lightNotes && (
+            <p className="text-xs text-smoke-400 mt-2 border-t border-white/5 pt-2">{lightNotes}</p>
+          )}
         </div>
       )}
 

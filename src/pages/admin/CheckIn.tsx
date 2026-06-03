@@ -48,9 +48,13 @@ export default function CheckInPage() {
   const meetingChecked = accepted.filter(g => isCheckedIn(g.id, 'meeting')).length
   const destChecked = accepted.filter(g => isCheckedIn(g.id, 'destination')).length
 
+  // Hide destination register if location is blank or TBC
+  const destLocation = event?.event_location ?? ''
+  const destConfirmed = destLocation.trim() !== '' && !destLocation.toUpperCase().includes('TBC')
+
   const locationLabel = activeTab === 'meeting'
     ? (event?.meeting_location || 'Meeting point')
-    : (event?.event_location || 'Destination')
+    : destLocation
 
   const currentChecked = activeTab === 'meeting' ? meetingChecked : destChecked
   const allAccountedFor = currentChecked === accepted.length
@@ -63,19 +67,20 @@ export default function CheckInPage() {
       />
 
       <PageContent>
-        {/* Tab selector */}
-        <div className="grid grid-cols-2 gap-2">
+        {/* Tab selector — destination only shown when location is confirmed */}
+        <div className={cn('gap-2', destConfirmed ? 'grid grid-cols-2' : 'flex')}>
           {(['meeting', 'destination'] as const).map(loc => {
+            if (loc === 'destination' && !destConfirmed) return null
             const count = loc === 'meeting' ? meetingChecked : destChecked
             const label = loc === 'meeting'
               ? (event?.meeting_location || 'Meeting Point')
-              : (event?.event_location || 'Destination')
+              : destLocation
             return (
               <button
                 key={loc}
                 onClick={() => setActiveTab(loc)}
                 className={cn(
-                  'glass-card p-3 text-left transition-all tap-highlight-none',
+                  'glass-card p-3 text-left transition-all tap-highlight-none flex-1',
                   activeTab === loc && 'border-fire-400/30 bg-fire-400/8 glow-fire-sm'
                 )}
               >
@@ -90,6 +95,15 @@ export default function CheckInPage() {
             )
           })}
         </div>
+
+        {/* Destination TBC notice */}
+        {!destConfirmed && (
+          <Card className="py-2 px-3 border-amber-400/20 bg-amber-500/5">
+            <p className="text-xs text-amber-400/80">
+              🏕️ Destination check-in will appear once the event location is confirmed in Settings
+            </p>
+          </Card>
+        )}
 
         {/* Status bar */}
         <Card className={cn('py-3', allAccountedFor && 'border-emerald-400/30 bg-emerald-500/5')}>

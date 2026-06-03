@@ -12,6 +12,12 @@ export interface Event {
   conflict_event_name?: string
   food_split_ratio: number // 0.0-1.0, default 0.6 for "both" guests
   food_buffer_factor: number // default 1.1 (10% buffer)
+  // Light level overrides — if set, these override the SunCalc auto-calculated times
+  light_walk_by?: string      // "Start walk by this time" — shown as key warning on weather widget
+  light_fireworks_after?: string  // "Fireworks after this time"
+  light_notes?: string        // Any extra light/timing notes for the organiser
+  lat?: number                // Event location lat for weather + light calculations
+  lon?: number                // Event location lon
   created_at: string
   updated_at: string
 }

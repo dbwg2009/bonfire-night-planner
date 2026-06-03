@@ -31,7 +31,12 @@ export default function Settings() {
     conflict_event_enabled: event?.conflict_event_enabled ?? false,
     conflict_event_name: event?.conflict_event_name ?? '',
     food_split_ratio: event?.food_split_ratio ?? 0.6,
-    food_buffer_factor: event?.food_buffer_factor ?? 1.1
+    food_buffer_factor: event?.food_buffer_factor ?? 1.1,
+    light_walk_by: event?.light_walk_by ?? '',
+    light_fireworks_after: event?.light_fireworks_after ?? '',
+    light_notes: event?.light_notes ?? '',
+    lat: event?.lat ?? '',
+    lon: event?.lon ?? ''
   })
 
   const [orgOpen, setOrgOpen] = useState(false)
@@ -137,6 +142,38 @@ export default function Settings() {
         </Card>
 
         {/* Conflict event toggle */}
+        {/* Light levels */}
+        <Card>
+          <h2 className="text-sm font-semibold text-smoke-300 mb-1">Light Levels & Timing</h2>
+          <p className="text-xs text-smoke-500 mb-3">Override the auto-calculated sun times for planning notes. Leave blank to use astronomical calculation.</p>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-smoke-400 mb-1 block">📍 Location latitude</label>
+                <Input type="number" step="0.001" value={eventForm.lat} onChange={e => setEventForm(f => ({ ...f, lat: e.target.value }))} placeholder="51.822" />
+              </div>
+              <div>
+                <label className="text-xs text-smoke-400 mb-1 block">📍 Longitude</label>
+                <Input type="number" step="0.001" value={eventForm.lon} onChange={e => setEventForm(f => ({ ...f, lon: e.target.value }))} placeholder="-3.016" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-smoke-400 mb-1 block">🚶 Start walk by</label>
+                <Input type="time" value={eventForm.light_walk_by} onChange={e => setEventForm(f => ({ ...f, light_walk_by: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs text-smoke-400 mb-1 block">🎆 Fireworks after</label>
+                <Input type="time" value={eventForm.light_fireworks_after} onChange={e => setEventForm(f => ({ ...f, light_fireworks_after: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-smoke-400 mb-1 block">Notes</label>
+              <Input value={eventForm.light_notes} onChange={e => setEventForm(f => ({ ...f, light_notes: e.target.value }))} placeholder="e.g. Sunset around 16:30 — arrive before dark" />
+            </div>
+          </div>
+        </Card>
+
         <Card>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-smoke-300">Conflicting Event</h2>

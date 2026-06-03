@@ -1,19 +1,35 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { CreditCard, MapPin, Flame, Settings, ChevronRight, LogOut, ListTodo } from 'lucide-react'
+import { CreditCard, MapPin, Flame, Settings, ChevronRight, LogOut, ListTodo, History, Plus } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { Card } from '../../components/ui/card'
 import { PageHeader, PageContent } from '../../components/Layout'
 import { useAuthStore } from '../../store/auth'
 import { useEventStore } from '../../store/event'
-import { cn } from '../../lib/utils'
+import { api } from '../../lib/api'
+import { cn, formatDate } from '../../lib/utils'
+import type { Event } from '../../lib/types'
 
 export default function More() {
   const organiser = useAuthStore(s => s.organiser)
   const logout = useAuthStore(s => s.logout)
   const event = useEventStore(s => s.currentEvent)
+  const setCurrentEvent = useEventStore(s => s.setCurrentEvent)
   const navigate = useNavigate()
 
   const canFinance = organiser?.is_owner || organiser?.permissions.finance
   const canSettings = organiser?.is_owner || organiser?.permissions.tasks_and_settings
+
+  const { data: allEvents = [] } = useQuery<Event[]>({
+    queryKey: ['events'],
+    queryFn: () => api.getEvents() as Promise<Event[]>
+  })
+
+  const pastEvents = allEvents.filter(e => e.id !== event?.id).sort((a, b) => b.year - a.year)
+
+  function switchToEvent(e: Event) {
+    setCurrentEvent(e)
+    navigate('/admin')
+  }
 
   const sections = [
     {
@@ -45,7 +61,7 @@ export default function More() {
     },
     {
       label: event?.conflict_event_name || 'Conflict Event',
-      desc: `Transport & timing for guests with a clash`,
+      desc: 'Transport & timing for guests with a clash',
       icon: Flame,
       to: '/admin/conflict-event',
       color: 'text-orange-400',
@@ -54,7 +70,7 @@ export default function More() {
     },
     {
       label: 'Settings',
-      desc: 'Event setup, food algorithm, organisers & roles',
+      desc: 'Event setup, food algorithm, light levels, roles',
       icon: Settings,
       to: '/admin/settings',
       color: 'text-smoke-400',
@@ -101,6 +117,49 @@ export default function More() {
             </Link>
           ))}
         </div>
+
+        {/* Previous bonfire nights */}
+        {(pastEvents.length > 0 || canSettings) && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <History size={14} className="text-smoke-500" />
+                <p className="text-xs font-semibold text-smoke-400 uppercase tracking-wider">Previous Years</p>
+              </div>
+              {canSettings && (
+                <Link to="/setup" className="flex items-center gap-1 text-xs text-fire-400 hover:text-fire-300 transition-colors">
+                  <Plus size={12} /> New year
+                </Link>
+              )}
+            </div>
+
+            {pastEvents.length === 0 ? (
+              <Card className="text-center py-4">
+                <p className="text-xs text-smoke-500">No previous events yet</p>
+                <p className="text-[11px] text-smoke-600 mt-0.5">Past events will appear here after the first year</p>
+              </Card>
+            ) : (
+              <div className="space-y-2">
+                {pastEvents.map(e => (
+                  <button
+                    key={e.id}
+                    onClick={() => switchToEvent(e)}
+                    className="w-full glass-card flex items-center gap-3 p-3 hover:bg-white/[0.06] active:scale-[0.98] transition-all tap-highlight-none text-left"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-smoke-700/50 flex items-center justify-center shrink-0">
+                      <span className="text-sm font-bold text-smoke-300">{e.year}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-smoke-200">{e.name}</p>
+                      <p className="text-xs text-smoke-500">{formatDate(e.date, 'EEEE d MMMM yyyy')} · {e.status}</p>
+                    </div>
+                    <ChevronRight size={14} className="text-smoke-600 shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Guest view link */}
         <a href="/" target="_blank" rel="noopener noreferrer">

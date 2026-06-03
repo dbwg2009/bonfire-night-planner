@@ -25,21 +25,24 @@ async function hashPin(pin: string): Promise<string> {
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-async function getOrganiserFromToken(c: any): Promise<{ id: string; event_id: string; is_owner: boolean; permissions: Record<string, boolean> } | null> {
+async function getOrganiserFromToken(c: any): Promise<{ organiser: Record<string, unknown> | null; reason: string }> {
   const auth = c.req.header('Authorization')
-  if (!auth?.startsWith('Bearer ')) return null
+  if (!auth) return { organiser: null, reason: 'no_auth_header' }
+  if (!auth.startsWith('Bearer ')) return { organiser: null, reason: 'no_bearer_prefix' }
+  const token = auth.slice(7)
+  if (!token) return { organiser: null, reason: 'empty_token' }
   try {
-    const payload = await verify(auth.slice(7), getSecret(c.env)) as Record<string, unknown>
-    return payload as any
+    const payload = await verify(token, getSecret(c.env)) as Record<string, unknown>
+    return { organiser: payload, reason: 'ok' }
   } catch {
-    return null
+    return { organiser: null, reason: 'verify_failed' }
   }
 }
 
 function requireAuth(handler: (c: any, organiser: any) => Promise<Response>) {
   return async (c: any) => {
-    const organiser = await getOrganiserFromToken(c)
-    if (!organiser) return c.json({ error: 'Unauthorised' }, 401)
+    const { organiser, reason } = await getOrganiserFromToken(c)
+    if (!organiser) return c.json({ error: 'Unauthorised', reason }, 401)
     return handler(c, organiser)
   }
 }

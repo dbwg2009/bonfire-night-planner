@@ -1,7 +1,19 @@
+import { useAuthStore } from '../store/auth'
+
 const BASE = '/api'
 
 function getToken(): string | null {
-  return localStorage.getItem('bonfire_token')
+  // The in-memory auth store is the source of truth — it's set on login and
+  // rehydrated from persisted state on reload, so it can't fall out of sync the
+  // way a separate localStorage key can. Fall back to localStorage, guarded
+  // against environments where storage access throws (blocked site storage).
+  const storeToken = useAuthStore.getState().token
+  if (storeToken) return storeToken
+  try {
+    return localStorage.getItem('bonfire_token')
+  } catch {
+    return null
+  }
 }
 
 function handleUnauthorised() {

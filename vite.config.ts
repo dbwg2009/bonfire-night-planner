@@ -9,6 +9,11 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      // Self-destroying SW: replaces any previously-installed service worker
+      // with one that unregisters itself and clears all caches. This frees
+      // clients trapped on a stale precached bundle (which was masking deploys).
+      // Remove this flag to re-enable PWA/offline support once clients recover.
+      selfDestroying: true,
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {

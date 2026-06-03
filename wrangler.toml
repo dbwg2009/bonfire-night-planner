@@ -7,12 +7,10 @@ pages_build_output_dir = "./dist"
 # Serve index.html for any unmatched path (SPA routing)
 not_found_handling = "single-page-application"
 
-# D1 database — replace database_id after running: npx wrangler d1 create bonfire-night-db
-# OR create via Cloudflare dashboard → Workers & Pages → D1 → Create database
-[[d1_databases]]
-binding = "DB"
-database_name = "bonfire-night-db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+# D1 binding is configured in the Cloudflare dashboard:
+# Pages project → Settings → Bindings → Add → D1 database
+# Variable name: DB  →  Database: bonfire-night-db
+# (No need to hardcode the database_id here)
 
 [vars]
 # Override these in Cloudflare dashboard → Pages project → Settings → Environment variables

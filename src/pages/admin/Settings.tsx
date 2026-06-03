@@ -39,7 +39,7 @@ export default function Settings() {
     lat: event?.lat ?? '',
     lon: event?.lon ?? '',
     contribution_link: event?.contribution_link ?? '',
-    contribution_match_ratio: event?.contribution_match_ratio ?? 0.5
+    contribution_match_ratio: event?.contribution_match_ratio ?? 0
   })
 
   const [orgOpen, setOrgOpen] = useState(false)

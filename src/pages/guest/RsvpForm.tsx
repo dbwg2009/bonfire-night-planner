@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { CheckCircle2 } from 'lucide-react'
 import { Card } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
@@ -44,7 +44,7 @@ export default function RsvpForm() {
   const [publicEvent, setPublicEvent] = useState<{ id: string; name?: string; contribution_link?: string; contribution_match_ratio: number } | null>(null)
   const [step, setStep] = useState<'form' | 'done'>('form')
   const [loading, setLoading] = useState(false)
-  const copyVariant = useRef(Math.floor(Math.random() * CONTRIBUTION_COPY.length))
+  const [copyVariant] = useState(() => Math.floor(Math.random() * CONTRIBUTION_COPY.length))
   const [milestones, setMilestones] = useState<MilestonesResponse | null>(null)
 
   useEffect(() => {
@@ -104,7 +104,7 @@ export default function RsvpForm() {
   if (step === 'done') {
     const showContribution = form.rsvp_status === 'accepted' && !!event?.contribution_link
     const copy = showContribution
-      ? CONTRIBUTION_COPY[copyVariant.current](form.name)
+      ? CONTRIBUTION_COPY[copyVariant](form.name)
       : null
 
     return (

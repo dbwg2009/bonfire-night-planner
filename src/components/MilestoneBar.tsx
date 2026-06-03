@@ -1,14 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '../lib/utils'
 import type { Milestone } from '../lib/types'
-
-const PRESET_ICONS: Record<string, string> = {
-  bonfire: '🔥', fireworks: '🎆', sparklers: '🎇', sausages: '🌭',
-  burgers: '🍔', drinks: '🍺', music: '🎵', logs: '🪵',
-  hotchoc: '☕', treats: '🍫', stars: '⭐', explosion: '💥',
-  party: '🎉', moon: '🌙', marshmallow: '🍡', lantern: '🏮',
-  trophy: '🏆', drum: '🥁', guitar: '🎸', sparkle: '✨'
-}
+import { PRESET_ICONS } from '../lib/milestoneConstants'
 
 export function getMilestoneIcon(m: Milestone): string {
   if (m.emoji) return m.emoji
@@ -31,13 +24,14 @@ export function MilestoneBar({ milestones, totalRaisedPence, compact = false, on
   const barRef = useRef<HTMLDivElement>(null)
 
   const sorted = [...milestones].sort((a, b) => a.amount - b.amount)
-  const displayed = compact
-    ? (sorted.every(m => m.important) || sorted.length <= 5 ? sorted : sorted.filter(m => m.important))
-    : sorted
+  const shouldShowAll = sorted.every(m => m.important) || sorted.length <= 5
+  const displayed = !compact ? sorted : (shouldShowAll ? sorted : sorted.filter(m => m.important))
 
   const maxAmount = sorted.length > 0 ? sorted[sorted.length - 1].amount : 1
   const targetPct = Math.min((totalRaisedPence / maxAmount) * 100, 100)
   const allFunded = totalRaisedPence >= maxAmount && sorted.length > 0
+
+  const milestoneKey = sorted.map(m => `${m.id}:${m.amount}`).join(',')
 
   // Determine newly unlocked milestones (unlocked now but not before animation started)
   useEffect(() => {
@@ -46,14 +40,12 @@ export function MilestoneBar({ milestones, totalRaisedPence, compact = false, on
     const fresh = new Set([...nowUnlocked].filter(id => !prev.has(id)))
     if (fresh.size > 0) setNewlyUnlocked(fresh)
     prevUnlockedRef.current = nowUnlocked
-  }, [totalRaisedPence, milestones])
+  }, [totalRaisedPence, milestoneKey])
 
   // Animate fill on mount
   useEffect(() => {
-    const raf = requestAnimationFrame(() => {
-      setTimeout(() => setAnimatedPct(targetPct), 80)
-    })
-    return () => cancelAnimationFrame(raf)
+    const timer = setTimeout(() => setAnimatedPct(targetPct), 80)
+    return () => clearTimeout(timer)
   }, [targetPct])
 
   if (displayed.length === 0) return null
@@ -219,6 +211,7 @@ function MilestoneIcon({
 }) {
   const icon = getMilestoneIcon(milestone)
   const hasImage = !!milestone.icon_image
+  const [imgError, setImgError] = useState(false)
 
   const sizeClass = unlocked ? 'w-8 h-8 text-base' : 'w-6 h-6 text-sm'
   const topStyle = position === 'above'
@@ -239,11 +232,12 @@ function MilestoneIcon({
       style={topStyle}
       title={`${milestone.name} — £${(milestone.amount / 100).toFixed(0)}`}
     >
-      {hasImage ? (
+      {hasImage && !imgError ? (
         <img
           src={milestone.icon_image}
           alt={milestone.name}
           className={cn('rounded-full object-cover', unlocked ? 'w-7 h-7' : 'w-5 h-5')}
+          onError={() => setImgError(true)}
         />
       ) : (
         <span className="leading-none">{icon}</span>
@@ -252,4 +246,3 @@ function MilestoneIcon({
   )
 }
 
-export { PRESET_ICONS }

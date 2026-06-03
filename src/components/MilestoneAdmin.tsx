@@ -6,7 +6,8 @@ import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Switch } from './ui/switch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from './ui/dialog'
-import { MilestoneBar, getMilestoneIcon, PRESET_ICONS } from './MilestoneBar'
+import { MilestoneBar, getMilestoneIcon } from './MilestoneBar'
+import { PRESET_ICONS } from '../lib/milestoneConstants'
 import { api } from '../lib/api'
 import { generateId } from '../lib/utils'
 import { toast } from './ui/toast'
@@ -113,7 +114,7 @@ export function MilestoneAdmin({ eventId }: Props) {
         canvas.height = Math.round(img.height * scale)
         const ctx = canvas.getContext('2d')!
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-        const b64 = canvas.toDataURL('image/jpeg', 0.8)
+        const b64 = canvas.toDataURL('image/png')
         setForm(f => ({ ...f, icon_image: b64 }))
       }
       img.src = e.target?.result as string
@@ -153,7 +154,7 @@ export function MilestoneAdmin({ eventId }: Props) {
     ctx.fill()
 
     // Bar fill
-    const fillW = Math.max(0, (totalRaised / maxAmount) * barW)
+    const fillW = Math.min(barW, Math.max(0, (totalRaised / maxAmount) * barW))
     const grad = ctx.createLinearGradient(barX, 0, barX + barW, 0)
     grad.addColorStop(0, '#e85f00')
     grad.addColorStop(1, '#fbbf24')

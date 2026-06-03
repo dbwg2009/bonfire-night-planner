@@ -154,6 +154,8 @@ export default function GuestDashboard() {
             <Card
               className="flex items-center justify-between cursor-pointer hover:border-fire-400/30 transition-colors tap-highlight-none"
               onClick={() => navigate('/tracker')}
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/tracker') }}
             >
               <div>
                 <p className="text-sm font-semibold text-smoke-100">Milestone Tracker</p>

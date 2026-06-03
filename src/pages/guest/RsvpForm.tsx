@@ -9,6 +9,15 @@ import { toast } from '../../components/ui/toast'
 import { useEventStore } from '../../store/event'
 import { api } from '../../lib/api'
 
+const COMMON_RESTRICTIONS = [
+  { label: '🥜 Nut allergy', value: 'nut_allergy' },
+  { label: '🥛 Dairy-free', value: 'dairy_free' },
+  { label: '🌾 Gluten-free', value: 'gluten_free' },
+  { label: '🐷 No pork / Halal', value: 'no_pork' },
+  { label: '🥬 Vegetarian', value: 'vegetarian' },
+  { label: '🌱 Vegan', value: 'vegan' },
+]
+
 export default function RsvpForm() {
   const event = useEventStore(s => s.currentEvent)
   const [step, setStep] = useState<'form' | 'done'>('form')
@@ -17,9 +26,20 @@ export default function RsvpForm() {
     name: '',
     rsvp_status: 'accepted' as 'accepted' | 'declined',
     dietary: [] as ('burger' | 'sausage')[],
+    dietary_restrictions: [] as string[],
+    dietary_notes: '',
     pickup_time: '',
     emergency_contact: ''
   })
+
+  const toggleRestriction = (value: string) => {
+    setForm(f => ({
+      ...f,
+      dietary_restrictions: f.dietary_restrictions.includes(value)
+        ? f.dietary_restrictions.filter(r => r !== value)
+        : [...f.dietary_restrictions, value]
+    }))
+  }
 
   const toggle = (item: 'burger' | 'sausage') => {
     setForm(f => ({
@@ -136,6 +156,31 @@ export default function RsvpForm() {
                 {form.dietary.length === 0 && (
                   <p className="text-xs text-smoke-500 mt-2 text-center">Select none if you don't want food</p>
                 )}
+              </Card>
+
+              <Card className="animate-slide-up">
+                <h2 className="text-sm font-semibold text-smoke-300 mb-2">Any dietary restrictions or allergies?</h2>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {COMMON_RESTRICTIONS.map(({ label, value }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => toggleRestriction(value)}
+                      className={`px-2.5 py-1.5 rounded-xl text-xs border tap-highlight-none transition-all ${
+                        form.dietary_restrictions.includes(value)
+                          ? 'bg-red-500/15 text-red-300 border-red-400/30'
+                          : 'glass border-white/10 text-smoke-400'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <Input
+                  value={form.dietary_notes}
+                  onChange={e => setForm(f => ({ ...f, dietary_notes: e.target.value }))}
+                  placeholder="Anything else we should know? (e.g. severe nut allergy)"
+                />
               </Card>
 
               <Card className="animate-slide-up">

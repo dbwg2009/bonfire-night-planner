@@ -11,16 +11,27 @@ import { WhatsAppCopyButton } from '../../components/WhatsAppCopyButton'
 import { PageHeader, PageContent } from '../../components/Layout'
 import { useEventStore } from '../../store/event'
 import { api } from '../../lib/api'
-import { RSVP_COLORS, RSVP_LABELS, generateId } from '../../lib/utils'
+import { RSVP_COLORS, RSVP_LABELS, generateId, cn } from '../../lib/utils'
 import { buildRsvpSummaryMessage } from '../../lib/whatsapp'
 import { buildPickupMessage } from '../../lib/whatsapp'
 import { toast } from '../../components/ui/toast'
 import type { Guest, Event } from '../../lib/types'
 
+const COMMON_RESTRICTIONS = [
+  { label: '🥜 Nut allergy', value: 'nut_allergy' },
+  { label: '🥛 Dairy-free', value: 'dairy_free' },
+  { label: '🌾 Gluten-free', value: 'gluten_free' },
+  { label: '🐷 No pork / Halal', value: 'no_pork' },
+  { label: '🥬 Vegetarian', value: 'vegetarian' },
+  { label: '🌱 Vegan', value: 'vegan' },
+]
+
 const EMPTY_GUEST: Omit<Guest, 'id' | 'event_id' | 'created_at' | 'updated_at'> = {
   name: '',
   rsvp_status: 'pending',
   dietary: [],
+  dietary_restrictions: [],
+  dietary_notes: '',
   pickup_time: '',
   emergency_contact: '',
   on_whatsapp: false,
@@ -73,6 +84,8 @@ export default function Guests() {
       name: guest.name,
       rsvp_status: guest.rsvp_status,
       dietary: guest.dietary,
+      dietary_restrictions: guest.dietary_restrictions ?? [],
+      dietary_notes: guest.dietary_notes ?? '',
       pickup_time: guest.pickup_time ?? '',
       emergency_contact: guest.emergency_contact ?? '',
       on_whatsapp: guest.on_whatsapp,
@@ -98,6 +111,15 @@ export default function Guests() {
       dietary: f.dietary.includes(item)
         ? f.dietary.filter(d => d !== item)
         : [...f.dietary, item]
+    }))
+  }
+
+  const toggleRestriction = (value: string) => {
+    setForm(f => ({
+      ...f,
+      dietary_restrictions: f.dietary_restrictions.includes(value)
+        ? f.dietary_restrictions.filter(r => r !== value)
+        : [...f.dietary_restrictions, value]
     }))
   }
 
@@ -234,6 +256,31 @@ export default function Guests() {
             </div>
 
             <div>
+              <label className="text-xs text-smoke-400 mb-2 block">Allergies & dietary restrictions</label>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {COMMON_RESTRICTIONS.map(({ label, value }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => toggleRestriction(value)}
+                    className={`px-2.5 py-1.5 rounded-xl text-xs border tap-highlight-none transition-all ${
+                      form.dietary_restrictions.includes(value)
+                        ? 'bg-red-500/15 text-red-300 border-red-400/30'
+                        : 'glass border-white/10 text-smoke-400'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <Input
+                value={form.dietary_notes}
+                onChange={e => setForm(f => ({ ...f, dietary_notes: e.target.value }))}
+                placeholder="Extra detail, e.g. 'severe nut allergy — carries epipen'"
+              />
+            </div>
+
+            <div>
               <label className="text-xs text-smoke-400 mb-1 block">End-of-night pick-up time</label>
               <Input
                 type="time"
@@ -312,22 +359,29 @@ function GuestCard({ guest, expanded, onToggle, onEdit, onDelete, conflictEventE
     ? 'Nothing'
     : guest.dietary.map(d => d === 'burger' ? '🍔' : '🌭').join(' ')
 
+  const hasRestrictions = (guest.dietary_restrictions?.length ?? 0) > 0 || !!guest.dietary_notes
+
   return (
-    <Card className="p-0 overflow-hidden">
+    <Card className={cn('p-0 overflow-hidden', hasRestrictions && 'border-red-400/20')}>
       <button
         onClick={onToggle}
         className="w-full flex items-center gap-3 p-3.5 text-left tap-highlight-none"
       >
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sm font-medium text-smoke-100 truncate">{guest.name}</p>
+            {hasRestrictions && (
+              <span className="text-[10px] bg-red-500/15 text-red-400 border border-red-400/20 rounded-full px-1.5 py-0.5 shrink-0">
+                ⚠️ Restrictions
+              </span>
+            )}
             {conflictEventEnabled && guest.conflict_event && (
               <span className="text-[10px] bg-purple-500/15 text-purple-400 border border-purple-400/20 rounded-full px-1.5 py-0.5 shrink-0">
                 {conflictEventName || 'Conflict'}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 mt-0.5">
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <span className={`text-[11px] px-1.5 py-0.5 rounded-full border ${RSVP_COLORS[guest.rsvp_status]}`}>
               {RSVP_LABELS[guest.rsvp_status]}
             </span>
@@ -345,6 +399,22 @@ function GuestCard({ guest, expanded, onToggle, onEdit, onDelete, conflictEventE
 
       {expanded && (
         <div className="border-t border-white/5 px-3.5 pb-3.5 pt-2 space-y-2 animate-fade-in">
+          {/* Restrictions — shown prominently */}
+          {hasRestrictions && (
+            <div className="bg-red-500/8 border border-red-400/20 rounded-xl p-2.5">
+              <p className="text-xs font-semibold text-red-400 mb-1">⚠️ Dietary restrictions</p>
+              {(guest.dietary_restrictions?.length ?? 0) > 0 && (
+                <div className="flex flex-wrap gap-1 mb-1">
+                  {(guest.dietary_restrictions ?? []).map(r => (
+                    <span key={r} className="text-[11px] bg-red-500/15 text-red-300 border border-red-400/20 rounded-full px-1.5 py-0.5">
+                      {COMMON_RESTRICTIONS.find(c => c.value === r)?.label ?? r}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {guest.dietary_notes && <p className="text-xs text-red-300/80">{guest.dietary_notes}</p>}
+            </div>
+          )}
           {guest.emergency_contact && (
             <div className="flex items-center gap-2 text-xs text-smoke-400">
               <Phone size={12} />

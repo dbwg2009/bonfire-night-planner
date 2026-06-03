@@ -44,6 +44,8 @@ export interface Guest {
   name: string
   rsvp_status: 'pending' | 'accepted' | 'declined'
   dietary: ('burger' | 'sausage')[]
+  dietary_restrictions: string[]   // allergens / things they can't eat
+  dietary_notes?: string           // freeform e.g. "severe nut allergy — epipen"
   pickup_time?: string
   emergency_contact?: string
   on_whatsapp: boolean

@@ -59,7 +59,13 @@ function mapOrganiser(row: Record<string, unknown>) {
 }
 
 function mapGuest(row: Record<string, unknown>) {
-  return { ...row, dietary: parseJson(row.dietary as string, []), on_whatsapp: row.on_whatsapp === 1, conflict_event: row.conflict_event === 1 }
+  return {
+    ...row,
+    dietary: parseJson(row.dietary as string, []),
+    dietary_restrictions: parseJson(row.dietary_restrictions as string, []),
+    on_whatsapp: row.on_whatsapp === 1,
+    conflict_event: row.conflict_event === 1
+  }
 }
 
 function mapCheckin(row: Record<string, unknown>) {
@@ -155,8 +161,8 @@ app.get('/api/events/:eventId/guests', requireAuth(async (c) => {
 app.post('/api/events/:eventId/guests', requireAuth(async (c) => {
   const body = await c.req.json()
   await c.env.DB.prepare(
-    'INSERT INTO guests (id, name, rsvp_status, dietary, pickup_time, emergency_contact, on_whatsapp, notes, conflict_event, event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(body.id, body.name, body.rsvp_status ?? 'pending', JSON.stringify(body.dietary ?? []), body.pickup_time ?? '', body.emergency_contact ?? '', body.on_whatsapp ? 1 : 0, body.notes ?? '', body.conflict_event ? 1 : 0, c.req.param('eventId')).run()
+    'INSERT INTO guests (id, name, rsvp_status, dietary, dietary_restrictions, dietary_notes, pickup_time, emergency_contact, on_whatsapp, notes, conflict_event, event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(body.id, body.name, body.rsvp_status ?? 'pending', JSON.stringify(body.dietary ?? []), JSON.stringify(body.dietary_restrictions ?? []), body.dietary_notes ?? '', body.pickup_time ?? '', body.emergency_contact ?? '', body.on_whatsapp ? 1 : 0, body.notes ?? '', body.conflict_event ? 1 : 0, c.req.param('eventId')).run()
   const guest = await c.env.DB.prepare('SELECT * FROM guests WHERE id = ?').bind(body.id).first()
   return c.json(mapGuest(guest as Record<string, unknown>))
 }))
@@ -164,8 +170,8 @@ app.post('/api/events/:eventId/guests', requireAuth(async (c) => {
 app.put('/api/events/:eventId/guests/:id', requireAuth(async (c) => {
   const body = await c.req.json()
   await c.env.DB.prepare(
-    'UPDATE guests SET name=?, rsvp_status=?, dietary=?, pickup_time=?, emergency_contact=?, on_whatsapp=?, notes=?, conflict_event=?, updated_at=datetime("now") WHERE id=? AND event_id=?'
-  ).bind(body.name, body.rsvp_status, JSON.stringify(body.dietary ?? []), body.pickup_time ?? '', body.emergency_contact ?? '', body.on_whatsapp ? 1 : 0, body.notes ?? '', body.conflict_event ? 1 : 0, c.req.param('id'), c.req.param('eventId')).run()
+    'UPDATE guests SET name=?, rsvp_status=?, dietary=?, dietary_restrictions=?, dietary_notes=?, pickup_time=?, emergency_contact=?, on_whatsapp=?, notes=?, conflict_event=?, updated_at=datetime("now") WHERE id=? AND event_id=?'
+  ).bind(body.name, body.rsvp_status, JSON.stringify(body.dietary ?? []), JSON.stringify(body.dietary_restrictions ?? []), body.dietary_notes ?? '', body.pickup_time ?? '', body.emergency_contact ?? '', body.on_whatsapp ? 1 : 0, body.notes ?? '', body.conflict_event ? 1 : 0, c.req.param('id'), c.req.param('eventId')).run()
   const guest = await c.env.DB.prepare('SELECT * FROM guests WHERE id = ?').bind(c.req.param('id')).first()
   return c.json(mapGuest(guest as Record<string, unknown>))
 }))
@@ -180,8 +186,8 @@ app.post('/api/events/:eventId/rsvp', async (c) => {
   const body = await c.req.json()
   const id = crypto.randomUUID()
   await c.env.DB.prepare(
-    'INSERT INTO guests (id, name, rsvp_status, dietary, pickup_time, emergency_contact, event_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).bind(id, body.name, body.rsvp_status ?? 'pending', JSON.stringify(body.dietary ?? []), body.pickup_time ?? '', body.emergency_contact ?? '', c.req.param('eventId')).run()
+    'INSERT INTO guests (id, name, rsvp_status, dietary, dietary_restrictions, dietary_notes, pickup_time, emergency_contact, event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(id, body.name, body.rsvp_status ?? 'pending', JSON.stringify(body.dietary ?? []), JSON.stringify(body.dietary_restrictions ?? []), body.dietary_notes ?? '', body.pickup_time ?? '', body.emergency_contact ?? '', c.req.param('eventId')).run()
   return c.json({ success: true, id })
 })
 

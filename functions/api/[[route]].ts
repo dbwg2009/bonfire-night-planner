@@ -62,7 +62,11 @@ function parseJson<T>(val: string | null, fallback: T): T {
 }
 
 function mapEvent(row: Record<string, unknown>) {
-  return { ...row, conflict_event_enabled: row.conflict_event_enabled === 1 }
+  return {
+    ...row,
+    conflict_event_enabled: row.conflict_event_enabled === 1,
+    contribution_match_ratio: row.contribution_match_ratio ?? 0.5
+  }
 }
 
 function mapOrganiser(row: Record<string, unknown>) {
@@ -92,7 +96,7 @@ function mapLocation(row: Record<string, unknown>) {
 // Returns safe public event info for the guest-facing view
 app.get('/api/public/event', async (c) => {
   const event = await c.env.DB.prepare(
-    "SELECT id, year, name, date, meeting_location, event_location, conflict_event_enabled, conflict_event_name FROM events WHERE status != 'archived' ORDER BY year DESC LIMIT 1"
+    "SELECT id, year, name, date, meeting_location, event_location, conflict_event_enabled, conflict_event_name, contribution_link, contribution_match_ratio FROM events WHERE status != 'archived' ORDER BY year DESC LIMIT 1"
   ).first()
   if (!event) return c.json({ error: 'No active event' }, 404)
   return c.json(mapEvent(event as Record<string, unknown>))
@@ -263,8 +267,8 @@ app.post('/api/events', requireAuth(async (c) => {
 app.put('/api/events/:id', requireAuth(async (c, org) => {
   const body = await c.req.json()
   await c.env.DB.prepare(
-    'UPDATE events SET name=?, date=?, meeting_location=?, event_location=?, conflict_event_enabled=?, conflict_event_name=?, food_split_ratio=?, food_buffer_factor=?, updated_at=datetime("now") WHERE id=?'
-  ).bind(body.name, body.date, body.meeting_location ?? '', body.event_location ?? '', body.conflict_event_enabled ? 1 : 0, body.conflict_event_name ?? '', body.food_split_ratio ?? 0.6, body.food_buffer_factor ?? 1.1, c.req.param('id')).run()
+    'UPDATE events SET name=?, date=?, meeting_location=?, event_location=?, conflict_event_enabled=?, conflict_event_name=?, food_split_ratio=?, food_buffer_factor=?, contribution_link=?, contribution_match_ratio=?, updated_at=datetime("now") WHERE id=?'
+  ).bind(body.name, body.date, body.meeting_location ?? '', body.event_location ?? '', body.conflict_event_enabled ? 1 : 0, body.conflict_event_name ?? '', body.food_split_ratio ?? 0.6, body.food_buffer_factor ?? 1.1, body.contribution_link ?? null, body.contribution_match_ratio ?? 0.5, c.req.param('id')).run()
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(c.req.param('id')).first()
   return c.json(mapEvent(event as Record<string, unknown>))
 }))

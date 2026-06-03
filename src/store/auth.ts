@@ -32,7 +32,12 @@ export const useAuthStore = create<AuthStore>()(
     }),
     {
       name: 'bonfire-auth',
-      partialize: (state) => ({ organiser: state.organiser, token: state.token })
+      partialize: (state) => ({ organiser: state.organiser, token: state.token }),
+      onRehydrateStorage: () => (state) => {
+        if (state?.token) {
+          localStorage.setItem('bonfire_token', state.token)
+        }
+      }
     }
   )
 )

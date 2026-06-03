@@ -4,9 +4,17 @@ function getToken(): string | null {
   return localStorage.getItem('bonfire_token')
 }
 
+function handleUnauthorised() {
+  localStorage.removeItem('bonfire_token')
+  localStorage.removeItem('bonfire-auth')
+  localStorage.removeItem('bonfire-event')
+  window.location.href = '/login'
+}
+
 async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  skipAuthRedirect = false
 ): Promise<T> {
   const token = getToken()
   const res = await fetch(`${BASE}${path}`, {
@@ -17,6 +25,10 @@ async function request<T>(
       ...(options.headers ?? {})
     }
   })
+  if (res.status === 401 && !skipAuthRedirect) {
+    handleUnauthorised()
+    return undefined as unknown as T
+  }
   const data = await res.json()
   if (!res.ok) throw new Error(data.error ?? 'Request failed')
   return data
@@ -28,7 +40,7 @@ export const api = {
     request<{ token: string; organiser: unknown }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ pin })
-    }),
+    }, true),
 
   // Events
   getEvents: () => request<unknown[]>('/events'),

@@ -13,8 +13,15 @@ const app = new Hono<{ Bindings: Env }>()
 
 app.use('*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] }))
 
-// JWT secret fallback
-const getSecret = (env: Env) => env.JWT_SECRET ?? 'bonfire-night-dev-secret-change-in-production'
+// JWT secret. The fallback MUST stay identical to [vars].JWT_SECRET in
+// wrangler.toml: on Cloudflare Pages the var can fail to propagate to some
+// Functions invocations, so a request that signs a token may see env.JWT_SECRET
+// while a later request that verifies it sees undefined (or vice versa). If the
+// fallback differs from the configured value, sign and verify use different
+// secrets and every authenticated request fails verification. Keeping them equal
+// makes auth correct whether or not the env var is present on a given request.
+const DEFAULT_JWT_SECRET = 'change-this-to-a-secure-random-string-in-production'
+const getSecret = (env: Env) => env.JWT_SECRET ?? DEFAULT_JWT_SECRET
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────────
 

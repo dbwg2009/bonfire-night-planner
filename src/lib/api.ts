@@ -4,6 +4,13 @@ function getToken(): string | null {
   return localStorage.getItem('bonfire_token')
 }
 
+function handleUnauthorised() {
+  localStorage.removeItem('bonfire_token')
+  localStorage.removeItem('bonfire-auth')
+  localStorage.removeItem('bonfire-event')
+  window.location.href = '/login'
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -18,6 +25,10 @@ async function request<T>(
     }
   })
   const data = await res.json()
+  if (res.status === 401) {
+    handleUnauthorised()
+    throw new Error('Session expired. Please log in again.')
+  }
   if (!res.ok) throw new Error(data.error ?? 'Request failed')
   return data
 }

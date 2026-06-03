@@ -4,15 +4,11 @@ compatibility_flags = ["nodejs_compat"]
 
 pages_build_output_dir = "./dist"
 
-# Serve index.html for any unmatched path (SPA routing)
-not_found_handling = "single-page-application"
-
-# D1 binding is configured in the Cloudflare dashboard:
-# Pages project → Settings → Bindings → Add → D1 database
-# Variable name: DB  →  Database: bonfire-night-db
-# (No need to hardcode the database_id here)
+[[d1_databases]]
+binding = "DB"
+database_name = "bonfire-night-db"
+database_id = "5dde02c8-aef8-4347-8072-5d93f4ce0775"
 
 [vars]
-# Override these in Cloudflare dashboard → Pages project → Settings → Environment variables
 JWT_SECRET = "change-this-to-a-secure-random-string-in-production"
 MET_OFFICE_API_KEY = ""

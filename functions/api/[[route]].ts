@@ -132,8 +132,7 @@ app.get('/api/events/:id', requireAuth(async (c) => {
   return c.json(mapEvent(event as Record<string, unknown>))
 }))
 
-app.post('/api/events', requireAuth(async (c, org) => {
-  if (!org.is_owner) return c.json({ error: 'Forbidden' }, 403)
+app.post('/api/events', requireAuth(async (c) => {
   const body = await c.req.json()
   await c.env.DB.prepare(
     'INSERT INTO events (id, year, name, date, status, meeting_location, event_location, conflict_event_enabled, conflict_event_name, food_split_ratio, food_buffer_factor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'

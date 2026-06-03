@@ -13,22 +13,16 @@ const app = new Hono<{ Bindings: Env }>()
 
 app.use('*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] }))
 
-// JWT secret handling.
+// JWT secret + algorithm.
 //
-// On Cloudflare Pages the JWT_SECRET env var resolves INCONSISTENTLY across
-// Functions invocations (a dashboard-configured value and the wrangler.toml
-// [vars] value can both exist and be applied per-instance). The result: a token
-// signed on one edge instance was verified against a different secret on
-// another, so every authenticated request failed verification (401) and the app
-// bounced users back to login.
-//
-// To make auth deterministic regardless of how the env var resolves, we always
-// SIGN with a fixed secret, and VERIFY against that fixed secret plus any
-// env-provided one. Tokens therefore validate on every instance.
+// hono's verify() REQUIRES the algorithm to be passed explicitly. Calling
+// verify(token, secret) throws `JwtAlgorithmRequired` before it ever checks the
+// signature, so every authenticated request failed with a 401 regardless of the
+// secret — which is what bounced users back to login. sign() defaults to HS256,
+// so verify() must be told HS256 too.
 const DEFAULT_JWT_SECRET = 'change-this-to-a-secure-random-string-in-production'
-const SIGN_SECRET = DEFAULT_JWT_SECRET
-const verifySecrets = (env: Env): string[] =>
-  [...new Set([DEFAULT_JWT_SECRET, env.JWT_SECRET].filter((s): s is string => !!s))]
+const JWT_ALG = 'HS256' as const
+const getSecret = (env: Env) => env.JWT_SECRET ?? DEFAULT_JWT_SECRET
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────────
 
@@ -45,13 +39,12 @@ async function getOrganiserFromToken(c: any): Promise<{ organiser: Record<string
   if (!auth.startsWith('Bearer ')) return { organiser: null, reason: 'no_bearer_prefix' }
   const token = auth.slice(7)
   if (!token) return { organiser: null, reason: 'empty_token' }
-  for (const secret of verifySecrets(c.env)) {
-    try {
-      const payload = await verify(token, secret) as Record<string, unknown>
-      return { organiser: payload, reason: 'ok' }
-    } catch { /* try the next candidate secret */ }
+  try {
+    const payload = await verify(token, getSecret(c.env), JWT_ALG) as Record<string, unknown>
+    return { organiser: payload, reason: 'ok' }
+  } catch {
+    return { organiser: null, reason: 'verify_failed' }
   }
-  return { organiser: null, reason: 'verify_failed' }
 }
 
 function requireAuth(handler: (c: any, organiser: any) => Promise<Response>) {
@@ -133,7 +126,7 @@ app.post('/api/auth/login', async (c) => {
     exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30 // 30 days
   }
 
-  const token = await sign(payload, SIGN_SECRET)
+  const token = await sign(payload, getSecret(c.env), JWT_ALG)
   return c.json({ token, organiser: mapOrganiser(org as Record<string, unknown>) })
 })
 

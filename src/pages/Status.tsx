@@ -37,7 +37,8 @@ const COMPONENTS = [
   { key: 'api', label: 'API / Functions' },
   { key: 'database', label: 'Database (D1)' },
   { key: 'auth', label: 'Auth service' },
-  { key: 'weather', label: 'Weather / external' }
+  { key: 'open_meteo', label: 'Open-Meteo' },
+  { key: 'met_office', label: 'Met Office DataHub' }
 ]
 
 export default function Status() {

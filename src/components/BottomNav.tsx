@@ -1,14 +1,15 @@
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, Users, UtensilsCrossed, ListTodo, Calendar, MoreHorizontal
+  LayoutDashboard, Users, UtensilsCrossed, CheckSquare, Calendar, MoreHorizontal
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 
+// Check-in replaces Tasks in the nav on event night — accessible from Dashboard quick-links any time
 const adminNavItems = [
   { to: '/admin', icon: LayoutDashboard, label: 'Home', exact: true },
   { to: '/admin/guests', icon: Users, label: 'Guests', exact: false },
   { to: '/admin/food', icon: UtensilsCrossed, label: 'Food', exact: false },
-  { to: '/admin/tasks', icon: ListTodo, label: 'Tasks', exact: false },
+  { to: '/admin/checkin', icon: CheckSquare, label: 'Check-in', exact: false },
   { to: '/admin/schedule', icon: Calendar, label: 'Schedule', exact: false },
   { to: '/admin/more', icon: MoreHorizontal, label: 'More', exact: false }
 ]

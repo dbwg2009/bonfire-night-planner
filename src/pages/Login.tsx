@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Delete } from 'lucide-react'
+import { Delete, Check } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
 import { api } from '../lib/api'
 import { FireBackground } from '../components/FireBackground'
@@ -10,6 +10,8 @@ import { Toaster } from '../components/ui/toast'
 import type { Organiser } from '../lib/types'
 
 const PAD = ['1','2','3','4','5','6','7','8','9','','0','⌫']
+const MAX_PIN = 6
+const MIN_PIN = 4
 
 export default function Login() {
   const [pin, setPin] = useState('')
@@ -18,25 +20,25 @@ export default function Login() {
   const navigate = useNavigate()
   const login = useAuthStore(s => s.login)
 
-  const press = (key: string) => {
+  function press(key: string) {
+    if (loading) return
     if (key === '⌫') {
       setPin(p => p.slice(0, -1))
-    } else if (pin.length < 6) {
-      setPin(p => p + key)
+    } else if (pin.length < MAX_PIN) {
+      const next = pin + key
+      setPin(next)
+      // Auto-submit at max PIN length
+      if (next.length === MAX_PIN) {
+        doSubmit(next)
+      }
     }
   }
 
-  useEffect(() => {
-    if (pin.length === 4 || pin.length === 6) {
-      submit()
-    }
-  }, [pin]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function submit() {
-    if (pin.length < 4) return
+  async function doSubmit(pinValue = pin) {
+    if (pinValue.length < MIN_PIN) return
     setLoading(true)
     try {
-      const res = await api.login(pin) as { token: string; organiser: Organiser }
+      const res = await api.login(pinValue) as { token: string; organiser: Organiser }
       login(res.organiser, res.token)
       navigate('/admin')
     } catch {
@@ -48,6 +50,8 @@ export default function Login() {
       setLoading(false)
     }
   }
+
+  const canSubmit = pin.length >= MIN_PIN && pin.length < MAX_PIN
 
   return (
     <div className="min-h-dvh min-h-screen flex flex-col items-center justify-center relative">
@@ -65,9 +69,9 @@ export default function Login() {
         <h1 className="text-2xl font-bold text-gradient-fire mb-1">Bonfire Night</h1>
         <p className="text-sm text-smoke-400 mb-8">Enter your organiser PIN</p>
 
-        {/* PIN dots */}
-        <div className={cn('flex justify-center gap-3 mb-8 transition-all', shake && 'animate-[shake_0.4s_ease]')}>
-          {Array.from({ length: 4 }).map((_, i) => (
+        {/* PIN dots — always show MAX_PIN dots */}
+        <div className={cn('flex justify-center gap-3 mb-8', shake && '[animation:shake_0.4s_ease]')}>
+          {Array.from({ length: MAX_PIN }).map((_, i) => (
             <div
               key={i}
               className={cn(
@@ -82,19 +86,23 @@ export default function Login() {
 
         {/* Keypad */}
         <div className="grid grid-cols-3 gap-3">
-          {PAD.map((key, i) => (
-            key === '' ? (
-              <div key={i} />
-            ) : key === '⌫' ? (
-              <button
-                key={i}
-                onClick={() => press(key)}
-                className="h-16 rounded-2xl glass flex items-center justify-center text-smoke-400 hover:text-smoke-200 active:scale-95 transition-all tap-highlight-none"
-                aria-label="Delete"
-              >
-                <Delete size={22} />
-              </button>
-            ) : (
+          {PAD.map((key, i) => {
+            if (key === '') return <div key={i} />
+
+            if (key === '⌫') {
+              return (
+                <button
+                  key={i}
+                  onClick={() => press(key)}
+                  className="h-16 rounded-2xl glass flex items-center justify-center text-smoke-400 hover:text-smoke-200 active:scale-95 transition-all tap-highlight-none"
+                  aria-label="Delete"
+                >
+                  <Delete size={22} />
+                </button>
+              )
+            }
+
+            return (
               <button
                 key={i}
                 onClick={() => press(key)}
@@ -104,10 +112,30 @@ export default function Login() {
                 {key}
               </button>
             )
-          ))}
+          })}
         </div>
 
-        <div className="mt-8">
+        {/* Manual confirm button — shown for 4 or 5 digit PINs before max length */}
+        <div className="mt-4 h-12">
+          {canSubmit && (
+            <button
+              onClick={() => doSubmit()}
+              disabled={loading}
+              className="w-full h-full rounded-2xl bg-fire-500 hover:bg-fire-400 text-white font-semibold flex items-center justify-center gap-2 transition-all tap-highlight-none glow-fire-sm animate-fade-in"
+            >
+              {loading ? (
+                <span className="text-sm">Checking…</span>
+              ) : (
+                <>
+                  <Check size={18} />
+                  <span className="text-sm">Confirm PIN</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
+        <div className="mt-6">
           <a href="/" className="text-sm text-smoke-500 hover:text-smoke-300 transition-colors">
             ← Back to guest view
           </a>
@@ -120,19 +148,13 @@ export default function Login() {
 function BonfireIcon() {
   return (
     <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="animate-flicker">
-      {/* Logs */}
       <ellipse cx="24" cy="40" rx="14" ry="3" fill="#4a1e00" opacity="0.8"/>
       <rect x="10" y="36" width="28" height="5" rx="2.5" fill="#7a3000" opacity="0.9"/>
-      {/* Inner flame - yellow core */}
       <path d="M24 8 C20 14 16 20 18 28 C20 33 24 35 24 35 C24 35 28 33 30 28 C32 20 28 14 24 8Z" fill="#ffd966"/>
-      {/* Middle flame - orange */}
       <path d="M24 12 C21 17 17 22 19 30 C21 34 24 35 24 35 C24 35 27 34 29 30 C31 22 27 17 24 12Z" fill="#ff8c2a"/>
-      {/* Outer flame */}
       <path d="M22 16 C18 22 16 27 18 32 C20 36 24 37 24 37 C24 37 28 36 30 32 C32 27 30 22 26 16 C25 20 23 22 22 16Z" fill="#e85f00" opacity="0.8"/>
-      {/* Flicker tips */}
       <path d="M21 6 C20 10 21 14 22 16 C21 12 20 8 21 6Z" fill="#ffeb66" opacity="0.7"/>
       <path d="M27 4 C27 8 26 12 26 16 C27 12 28 8 27 4Z" fill="#ffeb66" opacity="0.7"/>
-      {/* Glow base */}
       <ellipse cx="24" cy="35" rx="6" ry="2" fill="#ff6b00" opacity="0.4"/>
     </svg>
   )

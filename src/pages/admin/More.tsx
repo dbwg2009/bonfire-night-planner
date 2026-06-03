@@ -1,6 +1,5 @@
-import { Link } from 'react-router-dom'
-import { CreditCard, MapPin, Flame, Settings, ChevronRight, LogOut } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { CreditCard, MapPin, Flame, Settings, ChevronRight, LogOut, ListTodo } from 'lucide-react'
 import { Card } from '../../components/ui/card'
 import { PageHeader, PageContent } from '../../components/Layout'
 import { useAuthStore } from '../../store/auth'
@@ -17,6 +16,15 @@ export default function More() {
   const canSettings = organiser?.is_owner || organiser?.permissions.tasks_and_settings
 
   const sections = [
+    {
+      label: 'Tasks',
+      desc: 'To-do list with stages, owners and due dates',
+      icon: ListTodo,
+      to: '/admin/tasks',
+      color: 'text-purple-400',
+      bg: 'bg-purple-400/10',
+      show: true
+    },
     {
       label: 'Finance',
       desc: 'Costs, contributions and expenses',
@@ -37,20 +45,20 @@ export default function More() {
     },
     {
       label: event?.conflict_event_name || 'Conflict Event',
-      desc: `Transport & timing for guests doing ${event?.conflict_event_name ?? 'a conflicting event'}`,
+      desc: `Transport & timing for guests with a clash`,
       icon: Flame,
       to: '/admin/conflict-event',
-      color: 'text-purple-400',
-      bg: 'bg-purple-400/10',
+      color: 'text-orange-400',
+      bg: 'bg-orange-400/10',
       show: event?.conflict_event_enabled
     },
     {
       label: 'Settings',
-      desc: 'Event setup, food algorithm, organisers',
+      desc: 'Event setup, food algorithm, organisers & roles',
       icon: Settings,
       to: '/admin/settings',
       color: 'text-smoke-400',
-      bg: 'bg-smoke-400/10',
+      bg: 'bg-smoke-600/20',
       show: canSettings
     }
   ].filter(s => s.show)
@@ -60,7 +68,7 @@ export default function More() {
       <PageHeader title="More" subtitle={organiser?.name} />
 
       <PageContent>
-        {/* Organiser avatar */}
+        {/* Organiser card */}
         <Card className="flex items-center gap-3">
           <div
             className="w-11 h-11 rounded-xl flex items-center justify-center text-white text-lg font-bold shrink-0"
@@ -94,7 +102,7 @@ export default function More() {
           ))}
         </div>
 
-        {/* Guest link */}
+        {/* Guest view link */}
         <a href="/" target="_blank" rel="noopener noreferrer">
           <Card className="flex items-center gap-3 hover:bg-white/[0.06] active:scale-[0.98] transition-all tap-highlight-none">
             <div className="p-2.5 rounded-xl bg-fire-400/10 shrink-0">
@@ -111,7 +119,7 @@ export default function More() {
         {/* Logout */}
         <button
           onClick={() => { logout(); navigate('/login') }}
-          className="w-full glass-card p-4 flex items-center gap-3 text-red-400 hover:bg-red-500/5 tap-highlight-none transition-colors rounded-2xl"
+          className="w-full glass-card p-4 flex items-center gap-3 text-red-400 hover:bg-red-500/5 tap-highlight-none transition-colors"
         >
           <LogOut size={18} />
           <span className="text-sm font-medium">Log out</span>

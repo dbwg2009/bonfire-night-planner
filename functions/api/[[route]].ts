@@ -114,7 +114,8 @@ const STATUS_COMPONENTS: { key: string; label: string }[] = [
   { key: 'api', label: 'API / Functions' },
   { key: 'database', label: 'Database (D1)' },
   { key: 'auth', label: 'Auth service' },
-  { key: 'weather', label: 'Weather / external' }
+  { key: 'open_meteo', label: 'Open-Meteo' },
+  { key: 'met_office', label: 'Met Office DataHub' }
 ]
 
 // Runs live health checks, records them to D1 for a rough recent-history view,
@@ -148,12 +149,22 @@ app.get('/api/status', async (c) => {
     await c.env.DB.prepare('SELECT COUNT(*) AS n FROM organisers').first()
   }))
 
-  results.push(await check('weather', async () => {
+  results.push(await check('open_meteo', async () => {
     const res = await fetch(
       'https://api.open-meteo.com/v1/forecast?latitude=51.82&longitude=-3.02&daily=temperature_2m_max&forecast_days=1',
       { signal: AbortSignal.timeout(6000) }
     )
-    if (!res.ok) throw new Error('open-meteo HTTP ' + res.status)
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+  }))
+
+  results.push(await check('met_office', async () => {
+    const key = c.env.MET_OFFICE_API_KEY
+    if (!key) throw new Error('API key not configured')
+    const res = await fetch(
+      'https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/daily?latitude=51.82&longitude=-3.02&includeLocationName=false',
+      { headers: { apikey: key, Accept: 'application/json' }, signal: AbortSignal.timeout(8000) }
+    )
+    if (!res.ok) throw new Error('HTTP ' + res.status)
   }))
 
   results.push(await check('frontend', async () => {

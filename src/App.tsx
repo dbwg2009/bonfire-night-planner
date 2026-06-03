@@ -20,6 +20,7 @@ import Settings from './pages/admin/Settings'
 import More from './pages/admin/More'
 import GuestDashboard from './pages/guest/GuestDashboard'
 import RsvpForm from './pages/guest/RsvpForm'
+import Tracker from './pages/guest/Tracker'
 import Status from './pages/Status'
 
 const queryClient = new QueryClient({
@@ -48,6 +49,7 @@ export default function App() {
           {/* Public guest pages — no nav bar, standalone pages */}
           <Route path="/" element={<GuestDashboard />} />
           <Route path="/rsvp" element={<RsvpForm />} />
+          <Route path="/tracker" element={<Tracker />} />
           <Route path="/status" element={<Status />} />
 
           {/* Auth */}

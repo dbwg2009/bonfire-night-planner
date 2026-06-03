@@ -1,13 +1,15 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { CheckCircle2 } from 'lucide-react'
 import { Card } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { FireBackground } from '../../components/FireBackground'
+import { MilestoneBar } from '../../components/MilestoneBar'
 import { Toaster } from '../../components/ui/toast'
 import { toast } from '../../components/ui/toast'
 import { useEventStore } from '../../store/event'
 import { api } from '../../lib/api'
+import type { MilestonesResponse } from '../../lib/types'
 
 const CONTRIBUTION_COPY = [
   (name: string) => ({
@@ -42,12 +44,19 @@ export default function RsvpForm() {
   const [publicEvent, setPublicEvent] = useState<{ id: string; name?: string; contribution_link?: string; contribution_match_ratio: number } | null>(null)
   const [step, setStep] = useState<'form' | 'done'>('form')
   const [loading, setLoading] = useState(false)
-  const copyVariant = useRef(Math.floor(Math.random() * CONTRIBUTION_COPY.length))
+  const [copyVariant] = useState(() => Math.floor(Math.random() * CONTRIBUTION_COPY.length))
+  const [milestones, setMilestones] = useState<MilestonesResponse | null>(null)
 
   useEffect(() => {
     fetch('/api/public/event')
       .then(r => r.ok ? r.json() : null)
-      .then(d => d && setPublicEvent(d))
+      .then(d => {
+        if (!d) return
+        setPublicEvent(d)
+        return fetch(`/api/public/milestones/${d.id}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(m => m && setMilestones(m))
+      })
       .catch(() => {})
   }, [])
 
@@ -95,7 +104,7 @@ export default function RsvpForm() {
   if (step === 'done') {
     const showContribution = form.rsvp_status === 'accepted' && !!event?.contribution_link
     const copy = showContribution
-      ? CONTRIBUTION_COPY[copyVariant.current](form.name)
+      ? CONTRIBUTION_COPY[copyVariant](form.name)
       : null
 
     return (
@@ -126,6 +135,19 @@ export default function RsvpForm() {
               >
                 Help cover the costs 💛
               </a>
+
+              {/* Milestone bar on contribution screen */}
+              {milestones && milestones.milestones.length > 0 && (
+                <div className="mt-6 mb-4 text-left">
+                  <MilestoneBar
+                    milestones={milestones.milestones}
+                    totalRaisedPence={milestones.total_raised}
+                    compact
+                    showViewAll
+                    onViewAll={() => window.location.href = '/tracker'}
+                  />
+                </div>
+              )}
 
               <a href="/" className="text-smoke-500 text-sm hover:text-smoke-300 transition-colors">
                 No thanks — back to event info

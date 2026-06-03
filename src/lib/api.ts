@@ -1,4 +1,5 @@
 import { useAuthStore } from '../store/auth'
+import type { Milestone, MilestonesResponse } from './types'
 
 const BASE = '/api'
 
@@ -131,6 +132,15 @@ export const api = {
     request<unknown>(`/events/${eventId}/conflict-schedule/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteConflictItem: (eventId: string, id: string) =>
     request<unknown>(`/events/${eventId}/conflict-schedule/${id}`, { method: 'DELETE' }),
+
+  // Milestones (admin)
+  getMilestones: (eventId: string) => request<MilestonesResponse>(`/events/${eventId}/milestones`),
+  createMilestone: (eventId: string, data: unknown) =>
+    request<Milestone>(`/events/${eventId}/milestones`, { method: 'POST', body: JSON.stringify(data) }),
+  updateMilestone: (eventId: string, id: string, data: unknown) =>
+    request<Milestone>(`/events/${eventId}/milestones/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteMilestone: (eventId: string, id: string) =>
+    request<{ success: boolean }>(`/events/${eventId}/milestones/${id}`, { method: 'DELETE' }),
 
   // Organisers
   getOrganisers: (eventId: string) => request<unknown[]>(`/events/${eventId}/organisers`),

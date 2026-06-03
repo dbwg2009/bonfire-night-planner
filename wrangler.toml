@@ -10,4 +10,6 @@ database_name = "bonfire-night-db"
 database_id = "placeholder-will-be-set-after-wrangler-d1-create"
 
 [vars]
+# Set these in Cloudflare dashboard → Pages project → Settings → Environment variables
 JWT_SECRET = "change-this-to-a-secure-random-string-in-production"
+MET_OFFICE_API_KEY = ""

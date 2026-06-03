@@ -6,6 +6,7 @@ import { sign, verify } from 'hono/jwt'
 interface Env {
   DB: D1Database
   JWT_SECRET: string
+  MET_OFFICE_API_KEY?: string
 }
 
 const app = new Hono<{ Bindings: Env }>()
@@ -386,5 +387,131 @@ app.delete('/api/events/:eventId/organisers/:id', requireAuth(async (c, org) => 
   await c.env.DB.prepare('DELETE FROM organisers WHERE id = ? AND event_id = ?').bind(c.req.param('id'), c.req.param('eventId')).run()
   return c.json({ success: true })
 }))
+
+// ─── Weather proxy (keeps API keys server-side) ────────────────────────────────
+
+const MO_CODES: Record<number, string> = {
+  0:'Clear night',1:'Sunny',2:'Partly cloudy',3:'Partly cloudy',5:'Mist',6:'Fog',
+  7:'Cloudy',8:'Overcast',9:'Light shower',10:'Light shower',11:'Drizzle',12:'Light rain',
+  13:'Heavy shower',14:'Heavy shower',15:'Heavy rain',16:'Sleet shower',17:'Sleet shower',
+  18:'Sleet',19:'Hail shower',20:'Hail shower',21:'Hail',22:'Light snow',23:'Light snow',
+  24:'Light snow',25:'Heavy snow',26:'Heavy snow',27:'Heavy snow',28:'Thunderstorm',
+  29:'Thunderstorm',30:'Thunderstorm'
+}
+
+const WMO_CODES: Record<number, string> = {
+  0:'Clear sky',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',45:'Foggy',48:'Icy fog',
+  51:'Light drizzle',53:'Drizzle',55:'Heavy drizzle',61:'Light rain',63:'Rain',
+  65:'Heavy rain',71:'Light snow',73:'Snow',75:'Heavy snow',80:'Light showers',
+  81:'Showers',82:'Heavy showers',95:'Thunderstorm',99:'Thunderstorm with hail'
+}
+
+app.get('/api/weather/forecast', async (c) => {
+  const lat = parseFloat(c.req.query('lat') ?? '51.822')
+  const lon = parseFloat(c.req.query('lon') ?? '-3.016')
+  const targetDate = c.req.query('date') ?? new Date().toISOString().split('T')[0]
+
+  const daysUntil = Math.ceil((new Date(targetDate).getTime() - Date.now()) / 86400000)
+
+  interface ForecastEntry {
+    date: string
+    temp_max: number
+    temp_min: number
+    temp_avg: number
+    precipitation_probability: number
+    wind_speed: number
+    weather_description: string
+    weight: number
+  }
+
+  const entries: ForecastEntry[] = []
+
+  // Open-Meteo (free, always)
+  if (daysUntil <= 16 && daysUntil >= 0) {
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,weathercode&timezone=Europe%2FLondon&forecast_days=16`
+      const res = await fetch(url)
+      if (res.ok) {
+        const data: Record<string, Record<string, unknown>[]> = await res.json() as Record<string, Record<string, unknown>[]>
+        const idx = (data.daily.time as string[]).indexOf(targetDate)
+        if (idx !== -1) {
+          const tmax = data.daily.temperature_2m_max[idx] as number
+          const tmin = data.daily.temperature_2m_min[idx] as number
+          entries.push({
+            date: targetDate,
+            temp_max: tmax,
+            temp_min: tmin,
+            temp_avg: (tmax + tmin) / 2,
+            precipitation_probability: data.daily.precipitation_probability_max[idx] as number ?? 0,
+            wind_speed: data.daily.windspeed_10m_max[idx] as number ?? 0,
+            weather_description: WMO_CODES[data.daily.weathercode[idx] as number] ?? 'Unknown',
+            weight: 0.35
+          })
+        }
+      }
+    } catch { /* Open-Meteo unavailable */ }
+  }
+
+  // Met Office DataPoint (if API key is configured)
+  const moKey = c.env.MET_OFFICE_API_KEY
+  if (moKey && daysUntil <= 7 && daysUntil >= 0) {
+    try {
+      const url = `https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/daily?latitude=${lat}&longitude=${lon}&includeLocationName=false`
+      const res = await fetch(url, { headers: { apikey: moKey, Accept: 'application/json' } })
+      if (res.ok) {
+        const data = await res.json() as { features?: Array<{ properties?: { timeSeries?: Array<Record<string,unknown>> } }> }
+        const series = data.features?.[0]?.properties?.timeSeries ?? []
+        const entry = series.find(p => typeof p.time === 'string' && p.time.startsWith(targetDate))
+        if (entry) {
+          const tmax = entry.dayMaxScreenTemperature as number ?? 10
+          const tmin = entry.nightMinScreenTemperature as number ?? 5
+          entries.push({
+            date: targetDate,
+            temp_max: tmax,
+            temp_min: tmin,
+            temp_avg: (tmax + tmin) / 2,
+            precipitation_probability: Math.max(
+              entry.dayProbabilityOfPrecipitation as number ?? 0,
+              entry.nightProbabilityOfPrecipitation as number ?? 0
+            ),
+            wind_speed: entry.midday10MWindSpeed as number ?? 0,
+            weather_description: MO_CODES[entry.daySignificantWeatherCode as number ?? 0] ?? 'Unknown',
+            weight: 0.65
+          })
+        }
+      }
+    } catch { /* Met Office unavailable */ }
+  }
+
+  if (entries.length === 0) {
+    // Return November 5th historical average for UK
+    return c.json({
+      date: targetDate,
+      temp_max: 10, temp_min: 5, temp_avg: 7.5,
+      precipitation_probability: 55,
+      wind_speed: 20,
+      weather_description: 'Typically cloudy with some rain likely',
+      confidence: 0.3,
+      is_estimate: true,
+      sources: ['Historical average']
+    })
+  }
+
+  const totalWeight = entries.reduce((s, e) => s + e.weight, 0)
+  const w = (e: ForecastEntry) => e.weight / totalWeight
+
+  return c.json({
+    date: targetDate,
+    temp_max: Math.round(entries.reduce((s, e) => s + e.temp_max * w(e), 0) * 10) / 10,
+    temp_min: Math.round(entries.reduce((s, e) => s + e.temp_min * w(e), 0) * 10) / 10,
+    temp_avg: Math.round(entries.reduce((s, e) => s + e.temp_avg * w(e), 0) * 10) / 10,
+    precipitation_probability: Math.round(Math.max(...entries.map(e => e.precipitation_probability))),
+    wind_speed: Math.round(entries.reduce((s, e) => s + e.wind_speed * w(e), 0)),
+    weather_description: entries.sort((a, b) => b.weight - a.weight)[0].weather_description,
+    confidence: Math.min(totalWeight, 1),
+    is_estimate: false,
+    sources: entries.map(e => e.weight > 0.4 ? 'Met Office' : 'Open-Meteo')
+  })
+})
 
 export const onRequest = handle(app)

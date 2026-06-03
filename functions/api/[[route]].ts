@@ -107,6 +107,103 @@ app.get('/api/public/guest/:id', async (c) => {
   return c.json({ ...guest, dietary: parseJson(guest.dietary as string, []) })
 })
 
+// ─── Status / health (public) ──────────────────────────────────────────────────
+
+const STATUS_COMPONENTS: { key: string; label: string }[] = [
+  { key: 'frontend', label: 'Frontend' },
+  { key: 'api', label: 'API / Functions' },
+  { key: 'database', label: 'Database (D1)' },
+  { key: 'auth', label: 'Auth service' },
+  { key: 'weather', label: 'Weather / external' }
+]
+
+// Runs live health checks, records them to D1 for a rough recent-history view,
+// and returns current status + uptime. Public — no auth.
+app.get('/api/status', async (c) => {
+  const origin = new URL(c.req.url).origin
+
+  const check = async (key: string, fn: () => Promise<void>) => {
+    const start = Date.now()
+    try {
+      await fn()
+      return { key, ok: true, latency_ms: Date.now() - start, error: null as string | null }
+    } catch (e) {
+      return { key, ok: false, latency_ms: Date.now() - start, error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  // api is up by definition (we're responding); the client measures round-trip.
+  const results = [{ key: 'api', ok: true, latency_ms: 0, error: null as string | null }]
+
+  results.push(await check('database', async () => {
+    const r = await c.env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>()
+    if (!r || r.ok !== 1) throw new Error('unexpected query result')
+  }))
+
+  results.push(await check('auth', async () => {
+    // Exercise the full JWT sign+verify pipeline (the class of bug that broke
+    // login) and confirm the organisers table is reachable.
+    const token = await sign({ t: 1, exp: Math.floor(Date.now() / 1000) + 60 }, getSecret(c.env), JWT_ALG)
+    await verify(token, getSecret(c.env), JWT_ALG)
+    await c.env.DB.prepare('SELECT COUNT(*) AS n FROM organisers').first()
+  }))
+
+  results.push(await check('weather', async () => {
+    const res = await fetch(
+      'https://api.open-meteo.com/v1/forecast?latitude=51.82&longitude=-3.02&daily=temperature_2m_max&forecast_days=1',
+      { signal: AbortSignal.timeout(6000) }
+    )
+    if (!res.ok) throw new Error('open-meteo HTTP ' + res.status)
+  }))
+
+  results.push(await check('frontend', async () => {
+    const res = await fetch(origin + '/', { headers: { 'cache-control': 'no-cache' }, signal: AbortSignal.timeout(6000) })
+    if (!res.ok) throw new Error('index HTTP ' + res.status)
+    if (!(await res.text()).includes('id="root"')) throw new Error('index missing app root')
+  }))
+
+  const now = new Date().toISOString()
+
+  // Persist results + read recent history (best effort — never blocks live status).
+  const history: Record<string, number[]> = {}
+  try {
+    await c.env.DB.prepare(
+      'CREATE TABLE IF NOT EXISTS status_checks (id TEXT PRIMARY KEY, checked_at TEXT NOT NULL, component TEXT NOT NULL, ok INTEGER NOT NULL, latency_ms INTEGER)'
+    ).run()
+    await c.env.DB.prepare(
+      'CREATE INDEX IF NOT EXISTS idx_status_component_time ON status_checks(component, checked_at)'
+    ).run()
+    await c.env.DB.batch(results.map(r =>
+      c.env.DB.prepare('INSERT INTO status_checks (id, checked_at, component, ok, latency_ms) VALUES (?, ?, ?, ?, ?)')
+        .bind(crypto.randomUUID(), now, r.key, r.ok ? 1 : 0, r.latency_ms)
+    ))
+    await c.env.DB.prepare("DELETE FROM status_checks WHERE checked_at < datetime('now', '-7 days')").run()
+    const rows = (await c.env.DB.prepare(
+      "SELECT component, ok FROM status_checks WHERE checked_at > datetime('now', '-1 day') ORDER BY checked_at ASC"
+    ).all()).results as { component: string; ok: number }[]
+    for (const row of rows) (history[row.component] ??= []).push(row.ok)
+  } catch { /* history unavailable — still return live status */ }
+
+  const components = STATUS_COMPONENTS.map(({ key, label }) => {
+    const r = results.find(x => x.key === key)!
+    const h = history[key] ?? []
+    const okCount = h.filter(v => v === 1).length
+    return {
+      key,
+      label,
+      ok: r.ok,
+      latency_ms: r.latency_ms,
+      error: r.error,
+      uptime_24h: h.length ? Math.round((okCount / h.length) * 1000) / 10 : null,
+      history: h.slice(-40).map(v => v === 1)
+    }
+  })
+
+  const allOk = components.every(x => x.ok)
+  const anyOk = components.some(x => x.ok)
+  return c.json({ checked_at: now, overall: allOk ? 'operational' : anyOk ? 'partial' : 'major', components })
+})
+
 // ─── Auth ──────────────────────────────────────────────────────────────────────
 
 app.post('/api/auth/login', async (c) => {

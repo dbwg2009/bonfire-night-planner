@@ -46,7 +46,9 @@ export default function Login() {
       // Load the organiser's existing event so we go straight to the dashboard
       // instead of being forced onto the Create Event screen when one exists.
       try {
-        const events = await api.getEvents() as Event[]
+        // skipAuthRedirect: a failed event load here must not bounce us back to
+        // the login screen — fall through to the app instead.
+        const events = await api.getEvents(true) as Event[]
         setEvents(events)
         const chosen =
           events.find(e => e.id === res.organiser.event_id) ??

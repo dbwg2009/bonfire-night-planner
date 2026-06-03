@@ -1,132 +1,163 @@
-import { useQuery } from '@tanstack/react-query'
-import { Calendar, MapPin, Clock, AlertCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Calendar, MapPin, Clock, AlertCircle, Loader2 } from 'lucide-react'
 import { Card } from '../../components/ui/card'
 import { Countdown } from '../../components/Countdown'
 import { WeatherWidget } from '../../components/WeatherWidget'
-import { PageContent } from '../../components/Layout'
-import { useEventStore } from '../../store/event'
-import { api } from '../../lib/api'
+import { FireBackground } from '../../components/FireBackground'
+import { Toaster } from '../../components/ui/toast'
 import { formatDate, formatTime, getBonfireDate } from '../../lib/utils'
-import type { Guest } from '../../lib/types'
+import type { Event, Guest } from '../../lib/types'
+
+type PublicGuest = Pick<Guest, 'id' | 'name' | 'rsvp_status' | 'dietary' | 'pickup_time'>
 
 export default function GuestDashboard() {
-  const event = useEventStore(s => s.currentEvent)
+  const [event, setEvent] = useState<Event | null>(null)
+  const [myGuest, setMyGuest] = useState<PublicGuest | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  // Guest ID from URL param — share links like /?guest=GUEST_ID
+  const guestId = new URLSearchParams(window.location.search).get('guest')
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const eventRes = await fetch('/api/public/event')
+        if (eventRes.ok) {
+          const data = await eventRes.json() as Event
+          setEvent(data)
+        }
+      } catch { /* offline or no event yet */ }
+
+      if (guestId) {
+        try {
+          const guestRes = await fetch(`/api/public/guest/${guestId}`)
+          if (guestRes.ok) setMyGuest(await guestRes.json() as PublicGuest)
+        } catch { /* guest not found */ }
+      }
+
+      setLoading(false)
+    }
+    load()
+  }, [guestId])
+
   const year = event?.year ?? new Date().getFullYear()
   const bonfireDate = event ? new Date(event.date) : getBonfireDate(year)
 
-  // Guest lookup by URL param (e.g. ?guest=id)
-  const guestId = new URLSearchParams(window.location.search).get('guest')
-
-  const { data: guests = [] } = useQuery<Guest[]>({
-    queryKey: ['guests', event?.id, 'public'],
-    queryFn: () => api.getGuests(event!.id) as Promise<Guest[]>,
-    enabled: !!event?.id && !!guestId
-  })
-
-  const myGuest = guests.find(g => g.id === guestId)
+  if (loading) {
+    return (
+      <div className="min-h-dvh min-h-screen relative flex items-center justify-center">
+        <FireBackground />
+        <Toaster />
+        <Loader2 size={24} className="text-fire-400 animate-spin" />
+      </div>
+    )
+  }
 
   return (
-    <div className="animate-fade-in">
-      {/* Header */}
-      <div className="px-4 pt-8 pb-4 text-center">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl glass-warm mb-3">
-          <span className="text-3xl">🔥</span>
+    <div className="min-h-dvh min-h-screen relative animate-fade-in">
+      <FireBackground />
+      <Toaster />
+
+      <div className="relative z-10 max-w-md mx-auto">
+        {/* Header */}
+        <div className="px-4 pt-10 pb-4 text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl glass-warm mb-3 glow-fire">
+            <span className="text-3xl animate-flicker">🔥</span>
+          </div>
+          <h1 className="text-2xl font-bold text-smoke-100">{event?.name ?? `Bonfire Night ${year}`}</h1>
+          {event?.date && (
+            <p className="text-sm text-smoke-400 mt-1">{formatDate(event.date, 'EEEE d MMMM yyyy')}</p>
+          )}
         </div>
-        <h1 className="text-2xl font-bold text-smoke-100">{event?.name ?? `Bonfire Night ${year}`}</h1>
-        {event?.date && (
-          <p className="text-sm text-smoke-400 mt-1">{formatDate(event.date, 'EEEE d MMMM yyyy')}</p>
-        )}
-      </div>
 
-      <PageContent>
-        {/* Countdown */}
-        <Countdown targetDate={bonfireDate} />
+        <div className="px-4 pb-8 space-y-3">
+          {/* Countdown */}
+          <Countdown targetDate={bonfireDate} />
 
-        {/* Personal RSVP status */}
-        {myGuest && (
-          <Card className={
-            myGuest.rsvp_status === 'accepted'
-              ? 'border-emerald-400/25 bg-emerald-500/5'
-              : myGuest.rsvp_status === 'declined'
-              ? 'border-red-400/25 bg-red-500/5'
-              : ''
-          }>
-            <h2 className="text-sm font-semibold text-smoke-300 mb-1">Your RSVP</h2>
-            <div className="flex items-center gap-2">
-              <span className={`text-sm font-medium px-2 py-0.5 rounded-full border ${
+          {/* Personal RSVP status */}
+          {myGuest && (
+            <Card className={
+              myGuest.rsvp_status === 'accepted' ? 'border-emerald-400/25 bg-emerald-500/5'
+              : myGuest.rsvp_status === 'declined' ? 'border-red-400/25 bg-red-500/5' : ''
+            }>
+              <h2 className="text-sm font-semibold text-smoke-300 mb-2">Your RSVP — {myGuest.name}</h2>
+              <span className={`text-sm font-medium px-2.5 py-1 rounded-full border inline-block ${
                 myGuest.rsvp_status === 'accepted' ? 'text-emerald-400 border-emerald-400/25 bg-emerald-500/10'
                 : myGuest.rsvp_status === 'declined' ? 'text-red-400 border-red-400/25 bg-red-500/10'
                 : 'text-amber-400 border-amber-400/25 bg-amber-500/10'
               }`}>
-                {myGuest.rsvp_status.charAt(0).toUpperCase() + myGuest.rsvp_status.slice(1)}
+                {myGuest.rsvp_status === 'accepted' ? '✅ Coming!' : myGuest.rsvp_status === 'declined' ? "❌ Can't make it" : '⏳ Pending'}
               </span>
-              <span className="text-sm text-smoke-400">{myGuest.name}</span>
-            </div>
-          </Card>
-        )}
+            </Card>
+          )}
 
-        {/* Pick-up time */}
-        {myGuest?.pickup_time && myGuest.rsvp_status === 'accepted' && (
-          <Card>
-            <div className="flex items-center gap-2 mb-1">
-              <Clock size={14} className="text-fire-400" />
-              <h2 className="text-sm font-semibold text-smoke-300">Your end-of-night pick-up</h2>
-            </div>
-            <p className="text-2xl font-bold text-gradient-fire">{formatTime(myGuest.pickup_time)}</p>
-            <div className="flex items-center gap-1.5 mt-1.5 text-xs text-amber-400/80">
-              <AlertCircle size={11} />
-              <span>This is a preference — subject to change. Check with your organiser.</span>
-            </div>
-          </Card>
-        )}
-
-        {/* Event info */}
-        {event && (
-          <Card>
-            <h2 className="text-sm font-semibold text-smoke-300 mb-3">Event Info</h2>
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <Calendar size={16} className="text-fire-400 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-smoke-100">Date</p>
-                  <p className="text-sm text-smoke-400">{formatDate(event.date, 'EEEE d MMMM yyyy')}</p>
-                </div>
+          {/* Pick-up time */}
+          {myGuest?.pickup_time && myGuest.rsvp_status === 'accepted' && (
+            <Card>
+              <div className="flex items-center gap-2 mb-1">
+                <Clock size={14} className="text-fire-400" />
+                <h2 className="text-sm font-semibold text-smoke-300">Your end-of-night pick-up</h2>
               </div>
-              {event.meeting_location && (
-                <div className="flex items-start gap-3">
-                  <MapPin size={16} className="text-amber-400 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-smoke-100">Meet at</p>
-                    <p className="text-sm text-smoke-400">{event.meeting_location}</p>
-                  </div>
-                </div>
-              )}
-              {event.event_location && (
-                <div className="flex items-start gap-3">
-                  <span className="text-base mt-0 shrink-0">🔥</span>
-                  <div>
-                    <p className="text-sm font-medium text-smoke-100">Event at</p>
-                    <p className="text-sm text-smoke-400">{event.event_location}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </Card>
-        )}
+              <p className="text-2xl font-bold text-gradient-fire">{formatTime(myGuest.pickup_time)}</p>
+              <div className="flex items-center gap-1.5 mt-2 text-xs text-amber-400/80">
+                <AlertCircle size={11} />
+                <span>Preference only — subject to change. Check with your organiser.</span>
+              </div>
+            </Card>
+          )}
 
-        {/* Weather */}
-        <WeatherWidget eventDate={bonfireDate} compact />
+          {/* Event info */}
+          {event && (
+            <Card>
+              <h2 className="text-sm font-semibold text-smoke-300 mb-3">Event Info</h2>
+              <div className="space-y-3">
+                <InfoRow icon={<Calendar size={16} className="text-fire-400" />} label="Date" value={formatDate(event.date, 'EEEE d MMMM yyyy')} />
+                {event.meeting_location && (
+                  <InfoRow icon={<MapPin size={16} className="text-amber-400" />} label="Meet at" value={event.meeting_location} />
+                )}
+                {event.event_location && (
+                  <InfoRow icon={<span className="text-base leading-none">🔥</span>} label="Event at" value={event.event_location} />
+                )}
+              </div>
+            </Card>
+          )}
 
-        {/* RSVP prompt */}
-        {!myGuest && (
-          <Card className="text-center py-4 glass-warm">
-            <p className="text-sm text-smoke-300">Haven't RSVP'd yet?</p>
-            <a href="/rsvp" className="text-fire-400 text-sm font-medium mt-1 block hover:text-fire-300 transition-colors">
-              Submit your RSVP →
+          {/* Weather */}
+          <WeatherWidget eventDate={bonfireDate} compact />
+
+          {/* RSVP CTA */}
+          {!myGuest && (
+            <Card className="text-center py-5 glass-warm">
+              <p className="text-sm text-smoke-300 mb-2">Haven't RSVP'd yet?</p>
+              <a
+                href="/rsvp"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-fire-500 hover:bg-fire-400 text-white text-sm font-medium rounded-xl transition-colors tap-highlight-none glow-fire-sm"
+              >
+                Submit your RSVP 🔥
+              </a>
+            </Card>
+          )}
+
+          {/* Admin link */}
+          <div className="text-center pt-2">
+            <a href="/login" className="text-xs text-smoke-600 hover:text-smoke-400 transition-colors">
+              Organiser login
             </a>
-          </Card>
-        )}
-      </PageContent>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="mt-0.5 shrink-0">{icon}</span>
+      <div>
+        <p className="text-xs text-smoke-500 mb-0.5">{label}</p>
+        <p className="text-sm font-medium text-smoke-100">{value}</p>
+      </div>
     </div>
   )
 }

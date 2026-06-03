@@ -17,6 +17,7 @@ import Finance from './pages/admin/Finance'
 import Locations from './pages/admin/Locations'
 import ConflictEvent from './pages/admin/ConflictEvent'
 import Settings from './pages/admin/Settings'
+import More from './pages/admin/More'
 import GuestDashboard from './pages/guest/GuestDashboard'
 import RsvpForm from './pages/guest/RsvpForm'
 
@@ -43,13 +44,19 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<Login />} />
+          {/* Public guest pages — no nav bar, standalone pages */}
+          <Route path="/" element={<GuestDashboard />} />
           <Route path="/rsvp" element={<RsvpForm />} />
 
+          {/* Auth */}
+          <Route path="/login" element={<Login />} />
+
+          {/* Event setup — shown when admin is logged in but no event exists */}
           <Route path="/setup" element={
             <AdminGuard><EventSetup /></AdminGuard>
           } />
 
+          {/* Admin routes — all behind auth + event guards, have bottom nav */}
           <Route path="/admin" element={
             <AdminGuard><EventGuard><Layout /></EventGuard></AdminGuard>
           }>
@@ -63,10 +70,7 @@ export default function App() {
             <Route path="locations" element={<Locations />} />
             <Route path="conflict-event" element={<ConflictEvent />} />
             <Route path="settings" element={<Settings />} />
-          </Route>
-
-          <Route path="/" element={<Layout showNav={false} />}>
-            <Route index element={<GuestDashboard />} />
+            <Route path="more" element={<More />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

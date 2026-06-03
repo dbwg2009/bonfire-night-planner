@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { FireBackground } from './FireBackground'
 import { BottomNav } from './BottomNav'
 import { Toaster } from './ui/toast'
+import { cn } from '../lib/utils'
 
 interface LayoutProps {
   showNav?: boolean
@@ -11,7 +12,7 @@ export function Layout({ showNav = true }: LayoutProps) {
   return (
     <div className="relative min-h-dvh min-h-screen flex flex-col">
       <FireBackground />
-      <div className="relative z-10 flex flex-col flex-1 pb-[80px]">
+      <div className={cn('relative z-10 flex flex-col flex-1', showNav && 'pb-[80px]')}>
         <Outlet />
       </div>
       {showNav && <BottomNav />}
@@ -41,7 +42,6 @@ export function PageHeader({
 }
 
 export function PageContent({ children, className }: { children: React.ReactNode; className?: string }) {
-  const cn = (...classes: (string | undefined)[]) => classes.filter(Boolean).join(' ')
   return (
     <div className={cn('px-4 pb-6 space-y-3 flex-1', className)}>
       {children}

@@ -1,7 +1,6 @@
 import { Hono } from 'hono'
 import { handle } from 'hono/cloudflare-pages'
 import { cors } from 'hono/cors'
-import { jwt } from 'hono/jwt'
 import { sign, verify } from 'hono/jwt'
 
 interface Env {
@@ -69,6 +68,26 @@ function mapCheckin(row: Record<string, unknown>) {
 function mapLocation(row: Record<string, unknown>) {
   return { ...row, pros: parseJson(row.pros as string, []), cons: parseJson(row.cons as string, []), fire_permission: row.fire_permission === 1, fireworks_permission: row.fireworks_permission === 1 }
 }
+
+// ─── Public (no auth) ─────────────────────────────────────────────────────────
+
+// Returns safe public event info for the guest-facing view
+app.get('/api/public/event', async (c) => {
+  const event = await c.env.DB.prepare(
+    "SELECT id, year, name, date, meeting_location, event_location, conflict_event_enabled, conflict_event_name FROM events WHERE status != 'archived' ORDER BY year DESC LIMIT 1"
+  ).first()
+  if (!event) return c.json({ error: 'No active event' }, 404)
+  return c.json(mapEvent(event as Record<string, unknown>))
+})
+
+// Returns a single guest's public info (name, rsvp, pickup_time) — used for personalised guest links
+app.get('/api/public/guest/:id', async (c) => {
+  const guest = await c.env.DB.prepare(
+    'SELECT id, name, rsvp_status, dietary, pickup_time FROM guests WHERE id = ?'
+  ).bind(c.req.param('id')).first()
+  if (!guest) return c.json({ error: 'Guest not found' }, 404)
+  return c.json({ ...guest, dietary: parseJson(guest.dietary as string, []) })
+})
 
 // ─── Auth ──────────────────────────────────────────────────────────────────────
 

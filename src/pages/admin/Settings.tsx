@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Shield, LogOut } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Plus, Pencil, Trash2, Shield } from 'lucide-react'
 import { Card } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
@@ -22,8 +21,6 @@ export default function Settings() {
   const event = useEventStore(s => s.currentEvent)
   const setCurrentEvent = useEventStore(s => s.setCurrentEvent)
   const organiser = useAuthStore(s => s.organiser)
-  const logout = useAuthStore(s => s.logout)
-  const navigate = useNavigate()
   const qc = useQueryClient()
 
   const [eventForm, setEventForm] = useState({
@@ -201,14 +198,6 @@ export default function Settings() {
           </Card>
         ))}
 
-        {/* Logout */}
-        <button
-          onClick={() => { logout(); navigate('/login') }}
-          className="w-full glass-card p-4 flex items-center gap-3 text-red-400 hover:bg-red-500/5 tap-highlight-none transition-colors"
-        >
-          <LogOut size={18} />
-          <span className="text-sm font-medium">Log out</span>
-        </button>
       </PageContent>
 
       {/* Organiser dialog */}

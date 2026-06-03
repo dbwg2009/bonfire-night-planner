@@ -4,12 +4,17 @@ compatibility_flags = ["nodejs_compat"]
 
 pages_build_output_dir = "./dist"
 
+# Serve index.html for any unmatched path (SPA routing)
+not_found_handling = "single-page-application"
+
+# D1 database — replace database_id after running: npx wrangler d1 create bonfire-night-db
+# OR create via Cloudflare dashboard → Workers & Pages → D1 → Create database
 [[d1_databases]]
 binding = "DB"
 database_name = "bonfire-night-db"
-database_id = "placeholder-will-be-set-after-wrangler-d1-create"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
 
 [vars]
-# Set these in Cloudflare dashboard → Pages project → Settings → Environment variables
+# Override these in Cloudflare dashboard → Pages project → Settings → Environment variables
 JWT_SECRET = "change-this-to-a-secure-random-string-in-production"
 MET_OFFICE_API_KEY = ""

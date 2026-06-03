@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS milestones (
   event_id TEXT NOT NULL,
   name TEXT NOT NULL,
   description TEXT DEFAULT '',
-  amount INTEGER NOT NULL,        -- cumulative target in pence
+  amount INTEGER NOT NULL CHECK (amount > 0),        -- cumulative target in pence
   emoji TEXT DEFAULT '',          -- e.g. "🎆"
   icon_preset TEXT DEFAULT '',    -- key from preset library
   icon_image TEXT DEFAULT '',     -- base64 encoded compressed image

@@ -10,16 +10,17 @@ export default function Tracker() {
   const [data, setData] = useState<MilestonesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [animatedPct, setAnimatedPct] = useState(0)
+  const [error, setError] = useState(false)
 
   useEffect(() => {
     async function load() {
       try {
         const evRes = await fetch('/api/public/event')
-        if (!evRes.ok) return
+        if (!evRes.ok) { setError(true); return }
         const ev = await evRes.json() as { id: string; name?: string }
         const mRes = await fetch(`/api/public/milestones/${ev.id}`)
         if (mRes.ok) setData(await mRes.json() as MilestonesResponse)
-      } catch { /* offline */ } finally {
+      } catch { setError(true) } finally {
         setLoading(false)
       }
     }
@@ -51,7 +52,7 @@ export default function Tracker() {
       <div className="min-h-dvh min-h-screen relative flex items-center justify-center">
         <FireBackground />
         <div className="relative z-10 text-center px-6">
-          <p className="text-smoke-400 text-sm">No milestones set up yet.</p>
+          <p className="text-smoke-400 text-sm">{error ? 'Something went wrong. Please try again.' : 'No milestones set up yet.'}</p>
           <Link to="/" className="text-fire-400 text-sm hover:text-fire-300 transition-colors mt-4 block">← Back to event</Link>
         </div>
       </div>

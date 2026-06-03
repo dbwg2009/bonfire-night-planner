@@ -55,7 +55,7 @@ export const api = {
     }, true),
 
   // Events
-  getEvents: () => request<unknown[]>('/events'),
+  getEvents: (skipAuthRedirect = false) => request<unknown[]>('/events', {}, skipAuthRedirect),
   getEvent: (id: string) => request<unknown>(`/events/${id}`),
   createEvent: (data: unknown) =>
     request<unknown>('/events', { method: 'POST', body: JSON.stringify(data) }),

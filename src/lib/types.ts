@@ -18,6 +18,8 @@ export interface Event {
   light_notes?: string        // Any extra light/timing notes for the organiser
   lat?: number                // Event location lat for weather + light calculations
   lon?: number                // Event location lon
+  contribution_link?: string  // Payment URL (monzo.me, etc.) shown to guests
+  contribution_match_ratio: number // 0 = no match, 0.5 = match 50%, etc.
   created_at: string
   updated_at: string
 }

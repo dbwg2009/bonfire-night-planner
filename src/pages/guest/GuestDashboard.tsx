@@ -125,6 +125,11 @@ export default function GuestDashboard() {
           {/* Weather */}
           <WeatherWidget eventDate={bonfireDate} compact />
 
+          {/* Contribution */}
+          {event?.contribution_link && (
+            <ContributionCard link={event.contribution_link} matchRatio={event.contribution_match_ratio} />
+          )}
+
           {/* RSVP CTA */}
           {!myGuest && (
             <Card className="text-center py-5 glass-warm">
@@ -147,6 +152,32 @@ export default function GuestDashboard() {
         </div>
       </div>
     </div>
+  )
+}
+
+function ContributionCard({ link, matchRatio }: { link: string; matchRatio: number }) {
+  return (
+    <Card className="glass-warm text-center py-5">
+      <p className="text-lg mb-1">🔥</p>
+      <h2 className="text-sm font-semibold text-smoke-100 mb-2">Help cover the costs</h2>
+      <p className="text-xs text-smoke-400 mb-4 leading-relaxed">
+        Bonfire Night runs on contributions from guests — it's what keeps the fire burning year after year.
+        Any amount helps and nothing is ever expected.
+      </p>
+      {matchRatio > 0 && (
+        <p className="text-xs text-fire-400/80 mb-4 leading-relaxed">
+          Contributions are match-funded at {Math.round(matchRatio * 100)}% — so if guests raise £100, we'll put in £{Math.round(100 * matchRatio)} too.
+        </p>
+      )}
+      <a
+        href={link}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 px-4 py-2 bg-fire-500 hover:bg-fire-400 text-white text-sm font-medium rounded-xl transition-colors tap-highlight-none glow-fire-sm"
+      >
+        Help cover the costs 💛
+      </a>
+    </Card>
   )
 }
 

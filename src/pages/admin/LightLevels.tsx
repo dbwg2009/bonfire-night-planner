@@ -1,70 +1,150 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Sun, Moon, Sunset, Clock } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import SunCalc from 'suncalc'
-import { Card } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
+import { Input } from '../../components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog'
 import { PageHeader, PageContent } from '../../components/Layout'
 import { useEventStore } from '../../store/event'
 import { api } from '../../lib/api'
-import { formatTime, cn } from '../../lib/utils'
+import { generateId } from '../../lib/utils'
 import { toast } from '../../components/ui/toast'
 import type { ScheduleItem, Event } from '../../lib/types'
 
 const DEFAULT_LAT = 51.822
 const DEFAULT_LON = -3.016
-const FIREWORKS_THRESHOLD = 10  // below this % = "ideal for fireworks"
+const FIREWORKS_THRESHOLD = 10
+
+const PRESET_EVENTS = [
+  { title: 'Leaving meeting location', activity_type: 'Transportation' },
+  { title: 'Arriving at venue', activity_type: 'Transportation' },
+  { title: 'Finishing setup', activity_type: 'Setup' },
+  { title: 'Lighting bonfire', activity_type: 'Activity' },
+  { title: 'Lighting fireworks', activity_type: 'Fireworks' },
+] as const
 
 function parseLocalDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number)
   return new Date(y, m - 1, d)
 }
 
-function getLightPercent(timeStr: string, date: Date, lat: number, lon: number): number {
+function timeToMinutes(timeStr: string): number {
   const [h, m] = timeStr.split(':').map(Number)
+  return h * 60 + m
+}
+
+function minutesToTime(minutes: number): string {
+  const h = Math.floor(minutes / 60) % 24
+  const m = minutes % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+function getSunAltDeg(minutes: number, date: Date, lat: number, lon: number): number {
   const d = new Date(date)
-  d.setHours(h, m, 0, 0)
-  const pos = SunCalc.getPosition(d, lat, lon)
-  // altitude in radians: map [-0.314, 0.105] (≈-18° to 6°) → [0, 100]
-  const altDeg = (pos.altitude * 180) / Math.PI
+  d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0)
+  return (SunCalc.getPosition(d, lat, lon).altitude * 180) / Math.PI
+}
+
+function getLightPct(altDeg: number): number {
   return Math.round(Math.max(0, Math.min(100, ((altDeg + 18) / 24) * 100)))
 }
 
-function lightColor(pct: number): string {
-  if (pct >= 60) return 'text-amber-400'
-  if (pct >= 30) return 'text-orange-400'
-  if (pct >= 10) return 'text-indigo-400'
-  return 'text-purple-500'
+function skyGradientStyle(lightPct: number): React.CSSProperties {
+  if (lightPct >= 70) return { background: 'linear-gradient(to bottom, #0ea5e9 0%, #1d4ed8 100%)' }
+  if (lightPct >= 45) return { background: 'linear-gradient(to bottom, #fb923c 0%, #9a3412 100%)' }
+  if (lightPct >= 20) return { background: 'linear-gradient(to bottom, #9d174d 0%, #4c1d95 55%, #1e1b4b 100%)' }
+  if (lightPct >= 8) return { background: 'linear-gradient(to bottom, #312e81 0%, #1e1b4b 60%, #0f172a 100%)' }
+  return { background: 'linear-gradient(to bottom, #0f172a 0%, #000000 100%)' }
 }
 
-function lightIcon(pct: number) {
-  if (pct >= 60) return <Sun size={12} className="text-amber-400" />
-  if (pct >= 30) return <Sunset size={12} className="text-orange-400" />
-  if (pct >= 10) return <Moon size={12} className="text-indigo-400" />
-  return <Moon size={12} className="text-purple-500" />
+function sunDotColor(altDeg: number): string {
+  if (altDeg > 10) return '#fcd34d'
+  if (altDeg > 0) return '#fb923c'
+  if (altDeg > -6) return '#f87171'
+  return '#a78bfa'
 }
 
-function LightBar({ pct }: { pct: number }) {
+interface SunArcProps {
+  currentMinutes: number
+  arcPath: string
+  sunriseMinutes: number
+  nightMinutes: number
+  date: Date
+  lat: number
+  lon: number
+  lightPct: number
+}
+
+function SunArc({ currentMinutes, arcPath, sunriseMinutes, nightMinutes, date, lat, lon, lightPct }: SunArcProps) {
+  const W = 300
+  const horizonY = 60
+  const maxAlt = 40
+
+  const altDeg = getSunAltDeg(currentMinutes, date, lat, lon)
+  const t = Math.max(0, Math.min(1, (currentMinutes - sunriseMinutes) / Math.max(1, nightMinutes - sunriseMinutes)))
+  const sunX = 10 + t * (W - 20)
+  const sunY = horizonY - Math.max(-20, Math.min(maxAlt, altDeg)) * (horizonY / maxAlt) * 0.9
+  const isBelowHorizon = altDeg < 0
+  const starOpacity = Math.max(0, (15 - lightPct) / 15)
+
   return (
-    <div className="h-1.5 rounded-full bg-white/5 overflow-hidden w-16">
-      <div
-        className={cn('h-full rounded-full transition-all', pct >= 10 ? 'bg-amber-400/60' : 'bg-purple-500/60')}
-        style={{ width: `${pct}%` }}
+    <svg viewBox={`0 0 ${W} 80`} className="w-full" preserveAspectRatio="none" height={80}>
+      {starOpacity > 0 && (
+        [[40, 12], [110, 6], [180, 18], [245, 8], [165, 4], [75, 22], [220, 30]].map(([sx, sy], i) => (
+          <circle key={i} cx={sx} cy={sy} r={0.9} fill="white" opacity={starOpacity * 0.9} />
+        ))
+      )}
+      <path d={arcPath} fill="none" stroke="white" strokeOpacity={0.18} strokeWidth={1} strokeDasharray="4 4" />
+      <line x1={0} y1={horizonY} x2={W} y2={horizonY} stroke="white" strokeOpacity={0.25} strokeWidth={0.8} />
+      {!isBelowHorizon && (
+        <circle cx={sunX} cy={sunY} r={14} fill={sunDotColor(altDeg)} opacity={0.18} />
+      )}
+      <circle
+        cx={sunX}
+        cy={isBelowHorizon ? Math.min(horizonY + 12, sunY) : sunY}
+        r={isBelowHorizon ? 4 : 7}
+        fill={sunDotColor(altDeg)}
+        opacity={isBelowHorizon ? 0.55 : 1}
       />
-    </div>
+    </svg>
   )
 }
 
 export default function LightLevels() {
   const event = useEventStore(s => s.currentEvent) as Event | null
   const qc = useQueryClient()
-  const [editingItem, setEditingItem] = useState<ScheduleItem | null>(null)
-  const [targetInput, setTargetInput] = useState<string>('')
+  const [addOpen, setAddOpen] = useState(false)
+  const [newTitle, setNewTitle] = useState('')
+  const [localTimes, setLocalTimes] = useState<Record<string, number>>({})
 
   const lat = event?.lat ?? DEFAULT_LAT
   const lon = event?.lon ?? DEFAULT_LON
   const eventDate = event ? parseLocalDate(event.date) : new Date()
+
+  const { sunriseMinutes, nightMinutes } = useMemo(() => {
+    const times = SunCalc.getTimes(eventDate, lat, lon)
+    const toMin = (d: Date) => (d instanceof Date && !isNaN(d.getTime())) ? d.getHours() * 60 + d.getMinutes() : null
+    const sunrise = toMin(times.sunrise) ?? 6 * 60
+    const night = toMin(times.night) ?? toMin(times.nauticalDusk) ?? 21 * 60
+    return { sunriseMinutes: sunrise, nightMinutes: Math.max(sunrise + 120, night) }
+  }, [eventDate, lat, lon])
+
+  const arcPath = useMemo(() => {
+    const W = 300
+    const horizonY = 60
+    const maxAlt = 40
+    const steps = 40
+    return Array.from({ length: steps + 1 }, (_, i) => {
+      const mins = sunriseMinutes + (i / steps) * (nightMinutes - sunriseMinutes)
+      const alt = getSunAltDeg(mins, eventDate, lat, lon)
+      const x = 10 + (i / steps) * (W - 20)
+      const y = horizonY - Math.max(-20, Math.min(maxAlt, alt)) * (horizonY / maxAlt) * 0.9
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
+    }).join(' ')
+  }, [sunriseMinutes, nightMinutes, eventDate, lat, lon])
+
+  const defaultMinutes = Math.round((sunriseMinutes + nightMinutes) / 2)
 
   const { data: items = [], isLoading } = useQuery<ScheduleItem[]>({
     queryKey: ['schedule', event?.id],
@@ -72,180 +152,171 @@ export default function LightLevels() {
     enabled: !!event?.id
   })
 
-  const sorted = [...items].sort((a, b) => a.sort_order - b.sort_order || (a.start_time ?? '').localeCompare(b.start_time ?? ''))
+  const sorted = useMemo(() =>
+    [...items].sort((a, b) =>
+      (a.start_time ?? '').localeCompare(b.start_time ?? '') || a.sort_order - b.sort_order
+    ), [items])
 
-  const updateTarget = useMutation({
-    mutationFn: (item: ScheduleItem) =>
-      api.updateScheduleItem(event!.id, item.id, item),
+  const unseededPresets = PRESET_EVENTS.filter(p =>
+    !items.some(item => item.title.toLowerCase() === p.title.toLowerCase())
+  )
+
+  function getMinutes(item: ScheduleItem): number {
+    return localTimes[item.id] ?? (item.start_time ? timeToMinutes(item.start_time) : defaultMinutes)
+  }
+
+  const updateTime = useMutation({
+    mutationFn: ({ item, minutes }: { item: ScheduleItem; minutes: number }) =>
+      api.updateScheduleItem(event!.id, item.id, { ...item, start_time: minutesToTime(minutes) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['schedule'] })
+  })
+
+  const createItem = useMutation({
+    mutationFn: ({ title, activityType }: { title: string; activityType?: string }) =>
+      api.createScheduleItem(event!.id, {
+        id: generateId(),
+        event_id: event!.id,
+        title,
+        activity_type: activityType ?? '',
+        sort_order: items.length,
+        start_time: minutesToTime(defaultMinutes),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['schedule'] })
-      setEditingItem(null)
-      toast('Light target saved')
+      setAddOpen(false)
+      setNewTitle('')
+      toast('Event added')
     }
   })
 
-  function openEdit(item: ScheduleItem) {
-    setEditingItem(item)
-    setTargetInput(item.light_level_target != null ? String(item.light_level_target) : '')
+  function commitTime(item: ScheduleItem) {
+    const minutes = localTimes[item.id]
+    if (minutes === undefined) return
+    updateTime.mutate({ item, minutes })
+    setLocalTimes(prev => { const n = { ...prev }; delete n[item.id]; return n })
   }
-
-  function saveTarget() {
-    if (!editingItem) return
-    const parsed = targetInput === '' ? undefined : Math.max(0, Math.min(100, parseInt(targetInput, 10)))
-    updateTarget.mutate({ ...editingItem, light_level_target: parsed })
-  }
-
-  // Sun progression timeline rows
-  const sunTimes = (() => {
-    const times = SunCalc.getTimes(eventDate, lat, lon)
-    return [
-      { label: 'Sunset', time: times.sunset, icon: <Sunset size={12} className="text-fire-400" /> },
-      { label: 'Golden hour', time: times.goldenHour, icon: <Sun size={12} className="text-orange-400" /> },
-      { label: 'Civil dusk', time: times.dusk, icon: <Moon size={12} className="text-indigo-400" /> },
-      { label: 'Nautical dusk', time: times.nauticalDusk, icon: <Moon size={12} className="text-purple-400" /> },
-    ]
-  })()
 
   return (
     <div className="animate-fade-in">
       <PageHeader
         title="Light Levels"
-        subtitle="Assign brightness to schedule items"
+        subtitle="Time events to the sun"
+        action={<Button size="icon" onClick={() => setAddOpen(true)}><Plus size={18} /></Button>}
       />
 
       <PageContent>
-        {/* Sun progression card */}
-        <Card>
-          <p className="text-xs font-medium text-smoke-400 uppercase tracking-wider mb-3">Sun progression</p>
-          <div className="space-y-2">
-            {sunTimes.map(({ label, time, icon }) => {
-              const valid = time instanceof Date && !isNaN(time.getTime())
-              const timeStr = valid ? time.toTimeString().slice(0, 5) : null
-              const pct = timeStr ? getLightPercent(timeStr, eventDate, lat, lon) : 0
+        {/* Suggested presets */}
+        {unseededPresets.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-smoke-400 uppercase tracking-wider mb-2 px-1">Suggested events</p>
+            <div className="space-y-1.5">
+              {unseededPresets.map(preset => (
+                <button
+                  key={preset.title}
+                  onClick={() => createItem.mutate({ title: preset.title, activityType: preset.activity_type })}
+                  disabled={createItem.isPending}
+                  className="w-full text-left glass border border-white/10 rounded-xl px-3 py-2.5 flex items-center justify-between group hover:border-fire-400/30 transition-colors tap-highlight-none"
+                >
+                  <span className="text-sm text-smoke-400 group-hover:text-smoke-200 transition-colors">{preset.title}</span>
+                  <span className="text-[11px] text-fire-400 opacity-0 group-hover:opacity-100 transition-opacity">+ Add</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Schedule items with sun slider */}
+        {isLoading ? (
+          <div className="space-y-3">{[1, 2, 3].map(i => <div key={i} className="h-44 rounded-2xl shimmer" />)}</div>
+        ) : sorted.length > 0 ? (
+          <div className="space-y-3">
+            {sorted.map(item => {
+              const minutes = getMinutes(item)
+              const altDeg = getSunAltDeg(minutes, eventDate, lat, lon)
+              const lightPct = getLightPct(altDeg)
+              const isIdeal = lightPct < FIREWORKS_THRESHOLD
+
               return (
-                <div key={label} className="flex items-center gap-2 text-xs">
-                  <span className="shrink-0">{icon}</span>
-                  <span className="flex-1 text-smoke-400">{label}</span>
-                  <LightBar pct={pct} />
-                  <span className={cn('font-mono text-[11px] w-7 text-right', lightColor(pct))}>{pct}%</span>
-                  <span className="font-mono text-smoke-300 text-[11px] w-10 text-right">
-                    {timeStr ? formatTime(timeStr) : '–'}
-                  </span>
+                <div key={item.id} className="rounded-2xl overflow-hidden" style={skyGradientStyle(lightPct)}>
+                  <div className="px-2 pt-2 pb-0">
+                    <SunArc
+                      currentMinutes={minutes}
+                      arcPath={arcPath}
+                      sunriseMinutes={sunriseMinutes}
+                      nightMinutes={nightMinutes}
+                      date={eventDate}
+                      lat={lat}
+                      lon={lon}
+                      lightPct={lightPct}
+                    />
+                  </div>
+
+                  <div className="px-4 pb-2">
+                    <input
+                      type="range"
+                      min={sunriseMinutes}
+                      max={nightMinutes}
+                      step={5}
+                      value={minutes}
+                      onChange={e => setLocalTimes(prev => ({ ...prev, [item.id]: Number(e.target.value) }))}
+                      onMouseUp={() => commitTime(item)}
+                      onTouchEnd={() => commitTime(item)}
+                      className="w-full h-1 rounded-full cursor-pointer appearance-none bg-white/20
+                        [&::-webkit-slider-thumb]:appearance-none
+                        [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
+                        [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white
+                        [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:cursor-pointer
+                        [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5
+                        [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white
+                        [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="bg-black/35 px-3 py-2.5">
+                    <p className="text-sm font-medium text-white">{item.title}</p>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span className="text-xs text-white/70 font-mono tabular-nums">{minutesToTime(minutes)}</span>
+                      <span className="text-white/30 text-xs">·</span>
+                      <span className="text-xs text-white/60">{lightPct}% light</span>
+                      {isIdeal && (
+                        <span className="text-[10px] bg-purple-500/30 text-purple-200 border border-purple-400/30 px-1.5 py-0.5 rounded-full">
+                          🎆 ideal for fireworks
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )
             })}
           </div>
-          {event?.light_notes && (
-            <p className="text-xs text-smoke-400 mt-3 border-t border-white/5 pt-2">{event.light_notes}</p>
-          )}
-        </Card>
-
-        {/* Schedule items with light assignments */}
-        <div>
-          <p className="text-xs font-medium text-smoke-400 uppercase tracking-wider mb-2 px-1">Schedule items</p>
-          {isLoading ? (
-            <div className="space-y-2">{[1,2,3].map(i => <Card key={i} className="h-14 shimmer" />)}</div>
-          ) : sorted.length === 0 ? (
-            <Card className="text-center py-8 text-smoke-500 text-sm">No schedule items — add them on the Schedule page</Card>
-          ) : (
-            <div className="space-y-2">
-              {sorted.map(item => {
-                const autoLight = item.start_time ? getLightPercent(item.start_time, eventDate, lat, lon) : null
-                const displayPct = item.light_level_target ?? autoLight
-                const isIdeal = displayPct != null && displayPct < FIREWORKS_THRESHOLD
-                return (
-                  <Card key={item.id} className="p-3">
-                    <div className="flex items-start gap-3">
-                      <div className="shrink-0 mt-0.5">
-                        {displayPct != null ? lightIcon(displayPct) : <Sun size={12} className="text-smoke-600" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-medium text-smoke-100">{item.title}</p>
-                          {isIdeal && (
-                            <span className="text-[10px] bg-purple-500/15 text-purple-300 border border-purple-500/20 px-1.5 py-0.5 rounded-full">
-                              🎆 ideal for fireworks
-                            </span>
-                          )}
-                          {item.light_level_target != null && (
-                            <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded-full">
-                              manual {item.light_level_target}%
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 mt-1.5">
-                          {item.start_time && (
-                            <span className="flex items-center gap-1 text-[11px] text-smoke-500">
-                              <Clock size={10} />
-                              {formatTime(item.start_time)}
-                            </span>
-                          )}
-                          {displayPct != null && (
-                            <div className="flex items-center gap-1.5">
-                              <LightBar pct={displayPct} />
-                              <span className={cn('text-[11px] font-mono', lightColor(displayPct))}>{displayPct}%</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => openEdit(item)}
-                        className="shrink-0 text-xs text-smoke-500 hover:text-smoke-200 transition-colors tap-highlight-none px-2 py-1 rounded-lg glass"
-                      >
-                        Set %
-                      </button>
-                    </div>
-                  </Card>
-                )
-              })}
-            </div>
-          )}
-        </div>
+        ) : !unseededPresets.length ? (
+          <div className="text-center py-8 text-smoke-500 text-sm">No events yet — add one above</div>
+        ) : null}
 
         <p className="text-[11px] text-smoke-600 text-center">
-          Auto-calculated from SunCalc · tap "Set %" to override
+          Drag the slider to set event time · synced to Schedule page
         </p>
       </PageContent>
 
-      <Dialog open={!!editingItem} onOpenChange={open => { if (!open) setEditingItem(null) }}>
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Set Light Target — {editingItem?.title}</DialogTitle>
+            <DialogTitle>Add Event</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-xs text-smoke-400">
-              Override the auto-calculated light level for this item. 0 = pitch dark, 100 = full daylight.
-            </p>
-            <div>
-              <label className="text-xs text-smoke-400 mb-1 block">Light % (0–100, leave blank for auto)</label>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={targetInput}
-                onChange={e => setTargetInput(e.target.value)}
-                placeholder="auto"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-smoke-100 placeholder:text-smoke-600 focus:outline-none focus:border-fire-400/50"
-              />
-            </div>
-            {targetInput !== '' && !isNaN(parseInt(targetInput)) && parseInt(targetInput) < FIREWORKS_THRESHOLD && (
-              <p className="text-xs text-purple-300 bg-purple-500/10 border border-purple-500/20 rounded-xl px-3 py-2">
-                🎆 Below {FIREWORKS_THRESHOLD}% — this will show the "ideal for fireworks" badge
-              </p>
-            )}
-            {targetInput !== '' && (
-              <div className="flex items-center gap-2">
-                <LightBar pct={Math.max(0, Math.min(100, parseInt(targetInput) || 0))} />
-                <span className={cn('text-xs font-mono', lightColor(Math.max(0, Math.min(100, parseInt(targetInput) || 0))))}>
-                  {Math.max(0, Math.min(100, parseInt(targetInput) || 0))}%
-                </span>
-              </div>
-            )}
-          </div>
+          <Input
+            value={newTitle}
+            onChange={e => setNewTitle(e.target.value)}
+            placeholder="Event name"
+            onKeyDown={e => e.key === 'Enter' && newTitle.trim() && createItem.mutate({ title: newTitle })}
+            autoFocus
+          />
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setEditingItem(null)}>Cancel</Button>
-            <Button onClick={saveTarget} disabled={updateTarget.isPending}>
-              {updateTarget.isPending ? 'Saving…' : 'Save'}
+            <Button variant="ghost" onClick={() => setAddOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => createItem.mutate({ title: newTitle })}
+              disabled={!newTitle.trim() || createItem.isPending}
+            >
+              {createItem.isPending ? 'Adding…' : 'Add'}
             </Button>
           </DialogFooter>
         </DialogContent>

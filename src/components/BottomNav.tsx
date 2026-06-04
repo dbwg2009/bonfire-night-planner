@@ -16,8 +16,8 @@ const adminNavItems = [
 
 export function BottomNav() {
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-40 safe-bottom">
-      <div className="glass border-t border-white/[0.07] px-1 pt-2 pb-1">
+    <nav className="fixed bottom-0 inset-x-0 z-40 glass border-t border-white/[0.07]">
+      <div className="px-1 pt-2 pb-[max(0.25rem,env(safe-area-inset-bottom,0.25rem))]">
         <div className="flex justify-around max-w-lg mx-auto">
           {adminNavItems.map(({ to, icon: Icon, label, exact }) => (
             <NavLink

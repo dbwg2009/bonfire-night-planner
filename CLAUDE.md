@@ -58,10 +58,11 @@ Build: `npm run build` (runs `tsc -b && vite build`)
 
 - **D1 (SQLite)** — no JSON columns, no native arrays. Store lists as comma-separated strings or in a related table.
 - Migrations live in `migrations/` as numbered SQL files: `0001_xxx.sql`, `0002_xxx.sql`, etc.
+- The D1 database name is **`bonfire-night-db`**.
 - Apply migrations manually:
   ```bash
-  npx wrangler d1 execute bonfire-planner --file=migrations/00XX_name.sql
-  npx wrangler d1 execute bonfire-planner --file=migrations/00XX_name.sql --remote   # production
+  npx wrangler d1 execute bonfire-night-db --file=migrations/00XX_name.sql
+  npx wrangler d1 execute bonfire-night-db --file=migrations/00XX_name.sql --remote   # production
   ```
 - Always create a numbered migration file for every schema change — never modify the DB schema ad hoc.
 - Flag DB migrations in PR descriptions so they are easy to spot.

@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Light Levels Mockup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0f0f0f;
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  .phone {
+    width: 390px;
+    background: #111;
+    border-radius: 40px;
+    border: 2px solid #222;
+    overflow: hidden;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.8);
+  }
+
+  /* Header */
+  .header {
+    background: rgba(17,17,17,0.95);
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header-left { display: flex; flex-direction: column; gap: 2px; }
+  .header-subtitle { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }
+  .header-title { font-size: 22px; font-weight: 700; color: #e8e8e8; }
+  .header-add {
+    width: 36px; height: 36px;
+    background: rgba(232,95,0,0.15);
+    border: 1px solid rgba(232,95,0,0.3);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    color: #e85f00; font-size: 20px; font-weight: 300; cursor: pointer;
+  }
+
+  /* Page content */
+  .content { padding: 16px; display: flex; flex-direction: column; gap: 16px; background: #111; }
+
+  /* Sky panel */
+  .sky-panel {
+    border-radius: 20px;
+    overflow: hidden;
+    position: relative;
+    height: 260px;
+  }
+  .sky-bg {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg,
+      #0d0820 0%,
+      #1a1040 20%,
+      #2d1a5e 40%,
+      #1a1040 60%,
+      #0a0620 80%,
+      #080410 100%
+    );
+  }
+  /* Stars */
+  .star {
+    position: absolute;
+    width: 2px; height: 2px;
+    background: white;
+    border-radius: 50%;
+    opacity: 0.7;
+  }
+
+  /* Sine wave arc */
+  .arc-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Sun */
+  .sun-glow {
+    position: absolute;
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(200,70,0,0.6) 0%, rgba(120,30,0,0.2) 50%, transparent 70%);
+    transform: translate(-50%, -50%);
+    top: 72%; left: 68%;
+  }
+  .sun-body {
+    position: absolute;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #ff8040 0%, #cc3300 60%, #8a1500 100%);
+    box-shadow: 0 0 12px rgba(200,60,0,0.8), 0 0 24px rgba(150,30,0,0.4);
+    transform: translate(-50%, -50%);
+    top: 72%; left: 68%;
+  }
+
+  /* Horizon line */
+  .horizon {
+    position: absolute;
+    left: 0; right: 0;
+    top: 62%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 20%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.15) 80%, transparent 100%);
+  }
+  .horizon-label {
+    position: absolute;
+    right: 12px;
+    top: 63%;
+    font-size: 9px;
+    color: rgba(255,255,255,0.3);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  /* Selected event label */
+  .sky-event-label {
+    position: absolute;
+    top: 12px; left: 14px; right: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .sky-event-name {
+    font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.85);
+    background: rgba(0,0,0,0.4);
+    padding: 4px 10px;
+    border-radius: 8px;
+    backdrop-filter: blur(4px);
+  }
+  .sky-selected-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #e85f00;
+    box-shadow: 0 0 6px #e85f00;
+  }
+
+  /* Sky time display */
+  .sky-time {
+    position: absolute;
+    bottom: 60px; left: 0; right: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+  }
+  .sky-time-value {
+    font-size: 32px; font-weight: 700; color: rgba(255,255,255,0.9);
+    letter-spacing: 0.04em;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+    font-variant-numeric: tabular-nums;
+  }
+  .sky-light-value {
+    font-size: 12px; color: rgba(255,255,255,0.45);
+    letter-spacing: 0.04em;
+  }
+
+  /* Slider section */
+  .slider-section {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 0 16px 16px;
+    background: linear-gradient(0deg, rgba(0,0,0,0.7) 0%, transparent 100%);
+  }
+
+  /* Colored slider track */
+  .slider-track {
+    width: 100%;
+    height: 6px;
+    border-radius: 6px;
+    position: relative;
+    overflow: visible;
+    margin-bottom: 8px;
+    background: linear-gradient(90deg,
+      /* midnight - 6am: black */
+      #0a0a12 0%,
+      #0a0a12 25%,
+      /* 6am - 8am: dawn */
+      #1a1030 25%,
+      #2d1a5e 30%,
+      /* 8am - 4pm: day */
+      #1a4080 31%,
+      #2060a0 45%,
+      #2060a0 60%,
+      /* 4pm - 6pm: golden hour */
+      #8a5000 62%,
+      #c87020 67%,
+      /* 6pm sunset */
+      #8a3010 70%,
+      /* 6pm-7pm: civil */
+      #5a1840 73%,
+      /* 7pm-8pm: nautical */
+      #2a1060 77%,
+      /* 8pm+ dark */
+      #100820 82%,
+      #0a0412 100%
+    );
+  }
+  .sunset-marker {
+    position: absolute;
+    left: 70%;
+    top: -6px;
+    bottom: -6px;
+    width: 2px;
+    background: rgba(255,180,60,0.7);
+  }
+  .sunset-marker-label {
+    position: absolute;
+    left: 70%;
+    bottom: -22px;
+    transform: translateX(-50%);
+    font-size: 8px;
+    color: rgba(255,180,60,0.7);
+    white-space: nowrap;
+    letter-spacing: 0.06em;
+  }
+  /* Phase labels */
+  .phase-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 2px;
+    margin-bottom: 12px;
+  }
+  .phase-label {
+    font-size: 8px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0.45;
+    color: white;
+  }
+
+  /* Slider thumb (represented as a positioned circle) */
+  .slider-wrapper {
+    position: relative;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .slider-fill {
+    position: absolute;
+    left: 0;
+    width: 73%;
+    height: 6px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.1);
+  }
+  .slider-remaining {
+    position: absolute;
+    left: 73%;
+    right: 0;
+    height: 6px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.04);
+  }
+  .slider-thumb {
+    position: absolute;
+    left: 73%;
+    transform: translateX(-50%);
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5), 0 0 0 2px rgba(232,95,0,0.4);
+    cursor: grab;
+    z-index: 2;
+  }
+
+  /* Time input row */
+  .time-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 2px;
+  }
+  .time-input {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    color: #e8e8e8;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 6px 10px;
+    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+    min-width: 80px;
+    text-align: center;
+  }
+  .time-label { font-size: 11px; color: #555; }
+
+  /* Smart timing row */
+  .smart-timing-row {
+    display: flex; gap: 8px;
+  }
+  .smart-chip {
+    flex: 1;
+    border-radius: 12px;
+    padding: 8px 10px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .smart-chip.depart { background: rgba(232,95,0,0.1); border: 1px solid rgba(232,95,0,0.2); }
+  .smart-chip.bonfire { background: rgba(200,80,0,0.1); border: 1px solid rgba(200,80,0,0.2); }
+  .smart-chip.fireworks { background: rgba(120,40,150,0.1); border: 1px solid rgba(120,40,150,0.2); }
+  .smart-chip-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .smart-chip.depart .smart-chip-label { color: #e85f00; }
+  .smart-chip.bonfire .smart-chip-label { color: #f27820; }
+  .smart-chip.fireworks .smart-chip-label { color: #a060d0; }
+  .smart-chip-time { font-size: 15px; font-weight: 700; color: #e8e8e8; letter-spacing: 0.04em; }
+  .smart-chip-sub { font-size: 9px; color: #555; }
+
+  /* Suggested presets */
+  .section-label { font-size: 10px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.1em; }
+  .preset-row {
+    display: flex; gap: 8px; align-items: center;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 10px 12px;
+  }
+  .preset-dot { width: 5px; height: 5px; border-radius: 50%; background: #e85f00; opacity: 0.5; }
+  .preset-name { flex: 1; font-size: 13px; color: #787878; }
+  .preset-add { font-size: 11px; color: #e85f00; opacity: 0.7; }
+
+  /* Events grid */
+  .events-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .event-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .event-card.selected {
+    background: rgba(232,95,0,0.08);
+    border-color: rgba(232,95,0,0.3);
+  }
+  .event-card-icon {
+    font-size: 20px;
+    line-height: 1;
+  }
+  .event-card-name { font-size: 12px; font-weight: 600; color: #c8c8c8; line-height: 1.3; }
+  .event-card-time { font-size: 13px; font-weight: 700; color: #e8e8e8; font-variant-numeric: tabular-nums; }
+  .event-card-light { font-size: 10px; color: #555; }
+  .event-card-footer { display: flex; align-items: center; justify-content: space-between; }
+  .fireworks-badge {
+    font-size: 8.5px;
+    background: rgba(120,40,150,0.15);
+    color: #c080e0;
+    border: 1px solid rgba(120,40,150,0.25);
+    border-radius: 6px;
+    padding: 2px 5px;
+  }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="header">
+    <div class="header-left">
+      <div class="header-subtitle">Admin</div>
+      <div class="header-title">Light Levels</div>
+    </div>
+    <div class="header-add">+</div>
+  </div>
+
+  <div class="content">
+
+    <!-- Sky Panel -->
+    <div class="sky-panel">
+      <div class="sky-bg"></div>
+
+      <!-- Stars -->
+      <div class="star" style="top:8%;left:12%"></div>
+      <div class="star" style="top:15%;left:35%"></div>
+      <div class="star" style="top:5%;left:55%"></div>
+      <div class="star" style="top:20%;left:72%"></div>
+      <div class="star" style="top:10%;left:88%"></div>
+      <div class="star" style="top:28%;left:22%"></div>
+      <div class="star" style="top:18%;left:48%"></div>
+
+      <!-- Sine arc SVG -->
+      <svg class="arc-svg" viewBox="0 0 390 260" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="arcGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="rgba(255,255,255,0.06)"/>
+            <stop offset="45%" stop-color="rgba(255,160,60,0.25)"/>
+            <stop offset="70%" stop-color="rgba(255,100,30,0.2)"/>
+            <stop offset="100%" stop-color="rgba(255,255,255,0.06)"/>
+          </linearGradient>
+        </defs>
+        <!-- Sine wave: peaks above horizon (noon), trough below (midnight) -->
+        <!-- horizonY ≈ 161 (62% of 260) -->
+        <!-- Arc from x=0 to x=390, y = horizonY - sin(t*π) * 120 for full day -->
+        <path
+          d="M 0,161
+             C 50,161 80,30 130,25
+             C 175,20 195,18 195,18
+             C 215,18 245,22 285,50
+             C 320,75 350,130 358,148
+             C 365,161 375,161 390,161"
+          fill="none"
+          stroke="url(#arcGrad)"
+          stroke-width="1.5"
+          stroke-dasharray="5 4"
+        />
+        <!-- Underground portion of arc (night) -->
+        <path
+          d="M 0,161
+             C 20,175 40,195 60,205
+             C 100,220 140,225 195,225
+             C 250,225 300,215 340,195
+             C 360,183 375,165 390,161"
+          fill="none"
+          stroke="rgba(255,255,255,0.06)"
+          stroke-width="1"
+          stroke-dasharray="3 5"
+        />
+        <!-- Horizon line with sunset mark -->
+        <line x1="0" y1="161" x2="390" y2="161" stroke="rgba(255,255,255,0.18)" stroke-width="0.8"/>
+        <!-- Sunset vertical tick at ~70% of width = x≈273 -->
+        <line x1="273" y1="148" x2="273" y2="174" stroke="rgba(255,180,60,0.6)" stroke-width="1.5"/>
+        <text x="276" y="178" font-size="8" fill="rgba(255,180,60,0.65)" font-family="-apple-system,sans-serif">SUNSET 18:52</text>
+        <text x="350" y="169" font-size="8" fill="rgba(255,255,255,0.25)" font-family="-apple-system,sans-serif">HORIZON</text>
+        <!-- Smart window highlights on arc -->
+        <!-- Departure window: orange zone around 17:00-17:30 -->
+        <path d="M 228,70 C 236,58 244,49 252,44" fill="none" stroke="rgba(232,95,0,0.5)" stroke-width="4" stroke-linecap="round"/>
+        <!-- Bonfire window: warm zone around 19:30-20:30 -->
+        <path d="M 290,105 C 306,128 320,147 330,157" fill="none" stroke="rgba(200,100,0,0.45)" stroke-width="4" stroke-linecap="round"/>
+        <!-- Fireworks window: purple zone around 20:30+ -->
+        <path d="M 330,157 C 345,163 358,163 370,162" fill="none" stroke="rgba(130,60,180,0.5)" stroke-width="4" stroke-linecap="round"/>
+      </svg>
+
+      <!-- Sun (positioned below horizon – it's evening) -->
+      <div class="sun-glow"></div>
+      <div class="sun-body"></div>
+
+      <!-- Selected event chip -->
+      <div class="sky-event-label">
+        <div class="sky-selected-dot"></div>
+        <div class="sky-event-name">Lighting fireworks</div>
+      </div>
+
+      <!-- Time + light readout -->
+      <div class="sky-time">
+        <div class="sky-time-value">20:15</div>
+        <div class="sky-light-value">3% light · sun 22° below horizon · 🎆 ideal for fireworks</div>
+      </div>
+
+      <!-- Slider -->
+      <div class="slider-section">
+        <!-- Colored track -->
+        <div style="position:relative;height:6px;border-radius:6px;margin-bottom:6px;background:linear-gradient(90deg, #0a0a14 0%, #0a0a14 16%, #1a1258 22%, #1a3a6a 28%, #1a3a6a 52%, #7a4800 58%, #b86020 62%, #7a2010 68%, #4a1640 73%, #2a1060 78%, #100820 84%, #070410 100%)">
+          <!-- Sunset marker -->
+          <div style="position:absolute;left:68%;top:-5px;bottom:-5px;width:1.5px;background:rgba(255,180,60,0.8)"></div>
+          <div style="position:absolute;left:77%;top:-5px;bottom:-5px;width:1.5px;background:rgba(180,80,220,0.6)"></div>
+          <!-- Smart window overlays -->
+          <div style="position:absolute;left:57%;width:7%;height:100%;background:rgba(232,95,0,0.4);border-radius:3px;"></div>
+          <div style="position:absolute;left:73%;width:8%;height:100%;background:rgba(200,100,0,0.4);border-radius:3px;"></div>
+          <div style="position:absolute;left:80%;width:12%;height:100%;background:rgba(120,50,180,0.4);border-radius:3px;"></div>
+          <!-- Slider thumb -->
+          <div style="position:absolute;left:83%;transform:translateX(-50%);top:50%;transform:translate(-50%,-50%);width:22px;height:22px;border-radius:50%;background:white;box-shadow:0 2px 8px rgba(0,0,0,0.6),0 0 0 2px rgba(232,95,0,0.5);z-index:10;"></div>
+        </div>
+        <!-- Phase labels -->
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;margin-top:4px;">
+          <span style="font-size:8px;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.06em;">12am</span>
+          <span style="font-size:8px;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.06em;">6am</span>
+          <span style="font-size:8px;color:rgba(100,150,255,0.5);text-transform:uppercase;letter-spacing:0.06em;">Noon</span>
+          <span style="font-size:8px;color:rgba(255,165,50,0.6);text-transform:uppercase;letter-spacing:0.06em;">Sunset</span>
+          <span style="font-size:8px;color:rgba(180,80,220,0.55);text-transform:uppercase;letter-spacing:0.06em;">Dark</span>
+        </div>
+        <!-- Time input + light indicator -->
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:5px 10px;font-size:14px;font-weight:600;color:#e8e8e8;letter-spacing:0.06em;min-width:78px;text-align:center;">20:15</div>
+          <div style="font-size:11px;color:#555;">·</div>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <div style="font-size:13px;">🌑</div>
+            <div style="font-size:11px;color:#787878;">3% light</div>
+            <div style="font-size:10px;background:rgba(120,40,150,0.15);color:#c080e0;border:1px solid rgba(120,40,150,0.25);border-radius:6px;padding:2px 6px;margin-left:4px;">🎆 fireworks</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Smart timing summary row -->
+    <div class="smart-timing-row">
+      <div class="smart-chip depart">
+        <div class="smart-chip-label">🚶 Depart by</div>
+        <div class="smart-chip-time">17:22</div>
+        <div class="smart-chip-sub">20 min walk</div>
+      </div>
+      <div class="smart-chip bonfire">
+        <div class="smart-chip-label">🔥 Light bonfire</div>
+        <div class="smart-chip-time">18:45–19:15</div>
+        <div class="smart-chip-sub">30 min setup</div>
+      </div>
+      <div class="smart-chip fireworks">
+        <div class="smart-chip-label">🎆 Fireworks</div>
+        <div class="smart-chip-time">after 20:00</div>
+        <div class="smart-chip-sub">sun 15° below</div>
+      </div>
+    </div>
+
+    <!-- Suggested presets -->
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="section-label">Suggested events</div>
+      <div class="preset-row">
+        <div class="preset-dot"></div>
+        <div class="preset-name">Leaving meeting location</div>
+        <div class="preset-add">+ Add</div>
+      </div>
+      <div class="preset-row">
+        <div class="preset-dot"></div>
+        <div class="preset-name">Arriving at venue</div>
+        <div class="preset-add">+ Add</div>
+      </div>
+    </div>
+
+    <!-- Events grid -->
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="section-label">Events</div>
+      <div class="events-grid">
+        <!-- Selected card -->
+        <div class="event-card selected">
+          <div class="event-card-icon">🌑</div>
+          <div class="event-card-name">Lighting fireworks</div>
+          <div class="event-card-footer">
+            <div>
+              <div class="event-card-time">20:15</div>
+              <div class="event-card-light">3% light</div>
+            </div>
+          </div>
+          <div class="fireworks-badge">🎆 ideal</div>
+        </div>
+
+        <!-- Unselected card -->
+        <div class="event-card">
+          <div class="event-card-icon">🔥</div>
+          <div class="event-card-name">Lighting bonfire</div>
+          <div class="event-card-footer">
+            <div>
+              <div class="event-card-time">18:50</div>
+              <div class="event-card-light">8% light</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="event-card">
+          <div class="event-card-icon">🌅</div>
+          <div class="event-card-name">Finishing setup</div>
+          <div class="event-card-footer">
+            <div>
+              <div class="event-card-time">18:15</div>
+              <div class="event-card-light">24% light</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="event-card">
+          <div class="event-card-icon">☀️</div>
+          <div class="event-card-name">Arriving at venue</div>
+          <div class="event-card-footer">
+            <div>
+              <div class="event-card-time">17:45</div>
+              <div class="event-card-light">44% light</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="event-card">
+          <div class="event-card-icon">🚗</div>
+          <div class="event-card-name">Leaving meet. location</div>
+          <div class="event-card-footer">
+            <div>
+              <div class="event-card-time">17:22</div>
+              <div class="event-card-light">51% light</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

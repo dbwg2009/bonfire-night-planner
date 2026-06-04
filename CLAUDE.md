@@ -1,5 +1,35 @@
 # Bonfire Night Planner — Claude Guide
 
+---
+
+## ⚠️ MOST IMPORTANT RULE — READ THIS FIRST ⚠️
+
+**If Claude is not 100% certain about ANY aspect of a task — the intent, the approach, the scope, the design, the data model, anything — Claude MUST stop and ask questions using `AskUserQuestion` BEFORE writing any code or making any changes.**
+
+**Do not guess. Do not assume. Do not proceed on incomplete information.**
+
+### The questioning standard
+
+- **Aim for at least 3 questions per user prompt**, even for seemingly simple requests.
+- It is always better to ask too many questions than to build the wrong thing.
+- Questions should cover: intent ("what problem are you solving?"), scope ("what should this NOT do?"), and design ("how should it look/behave?").
+- If a request touches multiple concerns (UI + DB + API), ask about each layer separately.
+- Do not bundle everything into one vague question — ask specific, targeted questions with clear options where possible.
+
+### Examples of when to ask
+
+| Situation | Do this |
+|---|---|
+| User asks for "a new page" | Ask what data it shows, who can see it, how it should be laid out |
+| User asks to "fix a bug" | Ask for steps to reproduce, expected vs actual behaviour, whether a workaround exists |
+| User asks to "add a feature" | Ask for the full user journey, edge cases, whether DB changes are needed |
+| User asks to "make it look better" | Ask what specifically looks wrong, what the target feel is, which breakpoints matter |
+| Any DB schema change | Ask whether a migration is needed, whether existing data needs backfilling |
+
+**When in doubt: STOP AND ASK. Always use `AskUserQuestion` — never just ask in plain text, as the structured tool gives the user clear options and is easier to answer quickly.**
+
+---
+
 ## What this project is
 
 A personal event-planning PWA for one annual Bonfire Night celebration. It is both **beautiful and operationally useful on the night** — neither aspect is sacrificed for the other. The app is used from a phone on the night itself.

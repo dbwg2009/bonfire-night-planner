@@ -119,13 +119,17 @@ app.get('/api/public/event', async (c) => {
   return c.json(mapEvent(event as Record<string, unknown>))
 })
 
-// Returns a single guest's public info (name, rsvp, pickup_time) — used for personalised guest links
+// Returns a single guest's public info — used for personalised guest links and post-RSVP summary
 app.get('/api/public/guest/:id', async (c) => {
   const guest = await c.env.DB.prepare(
-    'SELECT id, name, rsvp_status, dietary, pickup_time FROM guests WHERE id = ?'
+    'SELECT id, name, rsvp_status, dietary, dietary_restrictions, dietary_notes, pickup_time, emergency_contact FROM guests WHERE id = ?'
   ).bind(c.req.param('id')).first()
   if (!guest) return c.json({ error: 'Guest not found' }, 404)
-  return c.json({ ...guest, dietary: parseJson(guest.dietary as string, []) })
+  return c.json({
+    ...guest,
+    dietary: parseJson(guest.dietary as string, []),
+    dietary_restrictions: parseJson(guest.dietary_restrictions as string, [])
+  })
 })
 
 // Returns invited guests for the RSVP name dropdown
@@ -344,15 +348,52 @@ app.post('/api/events/:eventId/rsvp', async (c) => {
   const { guest_id, rsvp_status, dietary, dietary_restrictions, dietary_notes, pickup_time, emergency_contact } = body
   if (!guest_id) return c.json({ error: 'guest_id required' }, 400)
   const guest = await c.env.DB.prepare(
-    "SELECT id FROM guests WHERE id = ? AND event_id = ? AND rsvp_status = 'invited'"
-  ).bind(guest_id, c.req.param('eventId')).first()
+    "SELECT id, name FROM guests WHERE id = ? AND event_id = ? AND rsvp_status = 'invited'"
+  ).bind(guest_id, c.req.param('eventId')).first() as { id: string; name: string } | null
   if (!guest) return c.json({ error: 'Guest not found or not invited' }, 404)
   const newStatus = rsvp_status === 'declined' ? 'declined' : 'accepted'
   await c.env.DB.prepare(
     'UPDATE guests SET rsvp_status=?, dietary=?, dietary_restrictions=?, dietary_notes=?, pickup_time=?, emergency_contact=?, updated_at=datetime("now") WHERE id=? AND event_id=?'
   ).bind(newStatus, JSON.stringify(dietary ?? []), JSON.stringify(dietary_restrictions ?? []), dietary_notes ?? '', pickup_time ?? '', emergency_contact ?? '', guest_id, c.req.param('eventId')).run()
+  const notifType = newStatus === 'accepted' ? 'rsvp_accepted' : 'rsvp_declined'
+  const notifMessage = newStatus === 'accepted' ? `${guest.name} has accepted` : `${guest.name} has declined`
+  await c.env.DB.prepare(
+    'INSERT INTO notifications (id, event_id, type, message, guest_id, guest_name) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(crypto.randomUUID(), c.req.param('eventId'), notifType, notifMessage, guest_id, guest.name).run()
   return c.json({ success: true })
 })
+
+app.post('/api/events/:eventId/rsvp/cancel', async (c) => {
+  const { guest_id } = await c.req.json()
+  if (!guest_id) return c.json({ error: 'guest_id required' }, 400)
+  const guest = await c.env.DB.prepare(
+    "SELECT id, name FROM guests WHERE id = ? AND event_id = ? AND rsvp_status = 'accepted'"
+  ).bind(guest_id, c.req.param('eventId')).first() as { id: string; name: string } | null
+  if (!guest) return c.json({ error: 'Guest not found or not accepted' }, 404)
+  await c.env.DB.prepare(
+    "UPDATE guests SET rsvp_status='declined', updated_at=datetime('now') WHERE id=? AND event_id=?"
+  ).bind(guest_id, c.req.param('eventId')).run()
+  await c.env.DB.prepare(
+    'INSERT INTO notifications (id, event_id, type, message, guest_id, guest_name) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(crypto.randomUUID(), c.req.param('eventId'), 'rsvp_cancelled', `${guest.name} cancelled their RSVP`, guest_id, guest.name).run()
+  return c.json({ success: true })
+})
+
+app.get('/api/events/:eventId/notifications', requireAuth(async (c, org) => {
+  if (org.event_id !== c.req.param('eventId')) return c.json({ error: 'Forbidden' }, 403)
+  const rows = await c.env.DB.prepare(
+    'SELECT * FROM notifications WHERE event_id = ? ORDER BY created_at DESC LIMIT 50'
+  ).bind(c.req.param('eventId')).all()
+  return c.json(rows.results)
+}))
+
+app.post('/api/events/:eventId/notifications/read-all', requireAuth(async (c, org) => {
+  if (org.event_id !== c.req.param('eventId')) return c.json({ error: 'Forbidden' }, 403)
+  await c.env.DB.prepare(
+    "UPDATE notifications SET read=1 WHERE event_id=? AND read=0"
+  ).bind(c.req.param('eventId')).run()
+  return c.json({ success: true })
+}))
 
 // ─── Check-ins ─────────────────────────────────────────────────────────────────
 

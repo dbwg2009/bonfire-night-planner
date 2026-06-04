@@ -79,6 +79,16 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     }).then(r => r.json()),
+  cancelRsvp: (eventId: string, guestId: string) =>
+    fetch(`${BASE}/events/${eventId}/rsvp/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guest_id: guestId })
+    }).then(r => r.json()),
+
+  // Notifications
+  getNotifications: (eventId: string) => request<{ id: string; type: string; message: string; guest_id: string; guest_name: string; read: number; created_at: string }[]>(`/events/${eventId}/notifications`),
+  markNotificationsRead: (eventId: string) => request<{ success: boolean }>(`/events/${eventId}/notifications/read-all`, { method: 'POST' }),
 
   // Check-in
   getCheckins: (eventId: string) => request<unknown[]>(`/events/${eventId}/checkins`),

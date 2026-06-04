@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import {
   Users, UtensilsCrossed, ListTodo, CreditCard, MapPin,
-  CheckSquare, Calendar, Settings, LogOut, ChevronRight
+  CheckSquare, Calendar, Settings, LogOut, ChevronRight, Car, Trophy
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Card } from '../../components/ui/card'
@@ -12,7 +12,7 @@ import { useAuthStore } from '../../store/auth'
 import { useEventStore } from '../../store/event'
 import { api } from '../../lib/api'
 import { getBonfireDate } from '../../lib/utils'
-import type { Guest, Task } from '../../lib/types'
+import type { Guest, Task, MilestonesResponse } from '../../lib/types'
 
 export default function Dashboard() {
   const organiser = useAuthStore(s => s.organiser)
@@ -34,17 +34,36 @@ export default function Dashboard() {
     enabled: !!event?.id
   })
 
+  const { data: pickupSlots = [] } = useQuery<{ id: string; label: string; sort_order: number }[]>({
+    queryKey: ['pickup-slots', event?.id],
+    queryFn: () => api.getPickupSlots(event!.id),
+    enabled: !!event?.id
+  })
+
+  const { data: milestonesData } = useQuery<MilestonesResponse>({
+    queryKey: ['milestones', event?.id],
+    queryFn: () => api.getMilestones(event!.id),
+    enabled: !!event?.id
+  })
+
   const accepted = guests.filter(g => g.rsvp_status === 'accepted').length
   const declined = guests.filter(g => g.rsvp_status === 'declined').length
   const pending = guests.filter(g => g.rsvp_status === 'invited').length
   const completedTasks = tasks.filter(t => t.status === 'completed').length
   const totalTasks = tasks.length
 
+  const slotsMeta = pickupSlots.length === 0 ? 'No slots yet' : `${pickupSlots.length} slot${pickupSlots.length !== 1 ? 's' : ''}`
+  const milestonesMeta = milestonesData && milestonesData.total_raised > 0
+    ? `£${(milestonesData.total_raised / 100).toFixed(0)} raised`
+    : 'Track progress'
+
   const quickLinks = [
     { to: '/admin/guests', icon: Users, label: 'Guests', meta: `${accepted} coming`, color: 'text-emerald-400' },
     { to: '/admin/food', icon: UtensilsCrossed, label: 'Food', meta: 'Shopping list', color: 'text-amber-400' },
     { to: '/admin/checkin', icon: CheckSquare, label: 'Check-in', meta: 'Live register', color: 'text-fire-400' },
+    { to: '/admin/pickup', icon: Car, label: 'Transport', meta: slotsMeta, color: 'text-teal-400' },
     { to: '/admin/finance', icon: CreditCard, label: 'Finance', meta: 'Costs', color: 'text-blue-400' },
+    { to: '/admin/milestones', icon: Trophy, label: 'Milestones', meta: milestonesMeta, color: 'text-yellow-400' },
     { to: '/admin/tasks', icon: ListTodo, label: 'Tasks', meta: `${completedTasks}/${totalTasks} done`, color: 'text-purple-400' },
     { to: '/admin/schedule', icon: Calendar, label: 'Schedule', meta: 'Timeline', color: 'text-rose-400' },
     { to: '/admin/locations', icon: MapPin, label: 'Locations', meta: 'Venue planning', color: 'text-cyan-400' },

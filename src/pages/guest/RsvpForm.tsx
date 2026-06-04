@@ -46,6 +46,13 @@ function setRsvpCookie() {
   document.cookie = `rsvp_submitted=1; expires=${expires.toUTCString()}; path=/; SameSite=Lax`
 }
 
+function storeRsvpGuest(id: string, name: string) {
+  try {
+    localStorage.setItem('rsvp_guest_id', id)
+    localStorage.setItem('rsvp_guest_name', name)
+  } catch { /* storage blocked */ }
+}
+
 type PublicEvent = { id: string; name?: string; contribution_link?: string; contribution_match_ratio: number }
 type InvitedGuest = { id: string; name: string }
 type PickupSlot = { id: string; label: string }
@@ -118,6 +125,7 @@ export default function RsvpForm() {
       const res = await api.submitRsvp(event.id, { guest_id: selectedGuest.id, rsvp_status: 'declined' })
       if (res.error) { toast(res.error, 'error'); return }
       setRsvpCookie()
+      storeRsvpGuest(selectedGuest.id, selectedGuest.name)
       setForm(f => ({ ...f, rsvp_status: 'declined' }))
       setStep('done')
     } catch {
@@ -135,6 +143,7 @@ export default function RsvpForm() {
       const res = await api.submitRsvp(event.id, { guest_id: selectedGuest.id, ...form, rsvp_status: 'accepted' })
       if (res.error) { toast(res.error, 'error'); return }
       setRsvpCookie()
+      storeRsvpGuest(selectedGuest.id, selectedGuest.name)
       setStep('done')
     } catch {
       toast('Failed to submit — please try again', 'error')

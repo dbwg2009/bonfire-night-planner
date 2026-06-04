@@ -60,6 +60,11 @@ export default function Pickup() {
     setOpen(true)
   }
 
+  function submit() {
+    if (!label.trim() || save.isPending) return
+    save.mutate()
+  }
+
   return (
     <div className="animate-fade-in">
       <PageHeader
@@ -122,13 +127,13 @@ export default function Pickup() {
               value={label}
               onChange={e => setLabel(e.target.value)}
               placeholder="e.g. 10:30 PM or After fireworks"
-              onKeyDown={e => e.key === 'Enter' && label.trim() && save.mutate()}
+              onKeyDown={e => e.key === 'Enter' && submit()}
             />
             <p className="text-[11px] text-smoke-500 mt-1.5">This is shown exactly as typed on the guest RSVP form</p>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={() => save.mutate()} disabled={!label.trim() || save.isPending}>
+            <Button onClick={submit} disabled={!label.trim() || save.isPending}>
               {save.isPending ? 'Saving…' : editing ? 'Save Changes' : 'Add Slot'}
             </Button>
           </DialogFooter>

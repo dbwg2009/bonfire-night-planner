@@ -320,23 +320,64 @@ app.put('/api/events/:id', requireAuth(async (c, org) => {
   if (!org.is_owner && !org.permissions?.tasks_and_settings) return c.json({ error: 'Forbidden' }, 403)
   const body = await c.req.json()
 
-  // Normalise light-level slider fields so bad payloads can't break timing math
+  // ── Validate & normalise all inputs before touching the DB ────────────────
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
   const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/
   const toMins = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
+  const clamp = (v: unknown, min: number, max: number, fallback: number) => {
+    const n = Number(v); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback
+  }
+  const str = (v: unknown, maxLen = 500) =>
+    typeof v === 'string' ? v.trim().slice(0, maxLen) : ''
+  const toBoolInt = (v: unknown) =>
+    v === true || v === 1 || v === '1' || v === 'true' ? 1 : 0
+  const isValidIsoDate = (v: string) => {
+    if (!DATE_RE.test(v)) return false
+    const [y, m, d] = v.split('-').map(Number)
+    if (m < 1 || m > 12) return false
+    const maxDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
+    return d >= 1 && d <= maxDay
+  }
+
+  const name = str(body.name, 200)
+  if (!name) return c.json({ error: 'name is required' }, 400)
+
+  const date = str(body.date)
+  if (!isValidIsoDate(date)) return c.json({ error: 'date must be a valid YYYY-MM-DD' }, 400)
+
+  // lat/lon: out-of-range or non-numeric → null (don't error, just clear)
+  const parsedLat = body.lat === '' || body.lat == null ? null : Number(body.lat)
+  const parsedLon = body.lon === '' || body.lon == null ? null : Number(body.lon)
+  const lat = parsedLat !== null && Number.isFinite(parsedLat) && parsedLat >= -90  && parsedLat <= 90  ? parsedLat : null
+  const lon = parsedLon !== null && Number.isFinite(parsedLon) && parsedLon >= -180 && parsedLon <= 180 ? parsedLon : null
+
+  // Numeric ratios — clamp to UI slider bounds so downstream math stays sane
+  const foodSplitRatio        = clamp(body.food_split_ratio,        0.3, 1.0, 0.6)
+  const foodBufferFactor      = clamp(body.food_buffer_factor,      1.0, 1.3, 1.1)
+  const contributionMatchRatio = clamp(body.contribution_match_ratio, 0,  1.0, 0)
+
   const rawSetup = Number(body.setup_duration_mins)
   const setupDuration = Number.isFinite(rawSetup) ? Math.min(180, Math.max(0, Math.round(rawSetup))) : 30
+
   let sliderStart = typeof body.slider_time_start === 'string' && TIME_RE.test(body.slider_time_start) ? body.slider_time_start : '00:00'
-  let sliderEnd   = typeof body.slider_time_end === 'string'   && TIME_RE.test(body.slider_time_end)   ? body.slider_time_end   : '23:59'
+  let sliderEnd   = typeof body.slider_time_end   === 'string' && TIME_RE.test(body.slider_time_end)   ? body.slider_time_end   : '23:59'
   if (toMins(sliderStart) >= toMins(sliderEnd)) { sliderStart = '00:00'; sliderEnd = '23:59' }
+
+  const meetingLocation  = str(body.meeting_location)
+  const eventLocation    = str(body.event_location)
+  const conflictName     = str(body.conflict_event_name)
+  const lightWalkBy    = TIME_RE.test(str(body.light_walk_by, 5))      ? str(body.light_walk_by, 5)      : ''
+  const lightFireworks = TIME_RE.test(str(body.light_fireworks_after, 5)) ? str(body.light_fireworks_after, 5) : ''
+  const lightNotes       = str(body.light_notes)
+  const contributionLink = typeof body.contribution_link === 'string' && body.contribution_link.trim()
+    ? body.contribution_link.trim().slice(0, 500) : null
 
   try {
     await c.env.DB.prepare(
       'UPDATE events SET name=?, date=?, meeting_location=?, event_location=?, conflict_event_enabled=?, conflict_event_name=?, food_split_ratio=?, food_buffer_factor=?, contribution_link=?, contribution_match_ratio=?, light_walk_by=?, light_fireworks_after=?, light_notes=?, lat=?, lon=?, setup_duration_mins=?, slider_time_start=?, slider_time_end=?, rsvp_enabled=?, updated_at=datetime("now") WHERE id=?'
-    ).bind(body.name, body.date, body.meeting_location ?? '', body.event_location ?? '', body.conflict_event_enabled ? 1 : 0, body.conflict_event_name ?? '', body.food_split_ratio ?? 0.6, body.food_buffer_factor ?? 1.1, body.contribution_link ?? null, body.contribution_match_ratio ?? 0, body.light_walk_by ?? '', body.light_fireworks_after ?? '', body.light_notes ?? '', body.lat ?? null, body.lon ?? null, setupDuration, sliderStart, sliderEnd, body.rsvp_enabled ? 1 : 0, c.req.param('id')).run()
+    ).bind(name, date, meetingLocation, eventLocation, toBoolInt(body.conflict_event_enabled), conflictName, foodSplitRatio, foodBufferFactor, contributionLink, contributionMatchRatio, lightWalkBy, lightFireworks, lightNotes, lat, lon, setupDuration, sliderStart, sliderEnd, toBoolInt(body.rsvp_enabled), c.req.param('id')).run()
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    // Surface the real D1 error so missing-column / unapplied-migration failures
-    // are visible rather than swallowed as a bare 500.
     return c.json({ error: 'Database error', detail: msg }, 500)
   }
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(c.req.param('id')).first()

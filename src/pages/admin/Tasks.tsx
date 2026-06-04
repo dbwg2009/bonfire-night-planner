@@ -39,9 +39,9 @@ export default function Tasks() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['tasks'] }); setOpen(false); toast('Task saved') }
   })
 
-  const cycleStatus = useMutation({
+  const toggleStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: Task['status'] }) => {
-      const next = status === 'pending' ? 'in_progress' : status === 'in_progress' ? 'completed' : 'pending'
+      const next = status === 'completed' ? 'pending' : 'completed'
       return api.updateTask(event!.id, id, { status: next })
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks'] })
@@ -119,7 +119,7 @@ export default function Tasks() {
                     <TaskRow
                       key={task.id}
                       task={task}
-                      onCycle={() => cycleStatus.mutate({ id: task.id, status: task.status })}
+                      onToggle={() => toggleStatus.mutate({ id: task.id, status: task.status })}
                       onEdit={() => openEdit(task)}
                       onDelete={() => { if (confirm('Delete task?')) remove.mutate(task.id) }}
                     />
@@ -145,7 +145,14 @@ export default function Tasks() {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-xs text-smoke-400 mb-1 block">Stage</label>
-                <Select value={form.stage} onValueChange={v => setForm(f => ({ ...f, stage: v as Task['stage'] }))}>
+                <Select value={form.stage} onValueChange={v => {
+                  const stage = v as Task['stage']
+                  setForm(f => ({
+                    ...f,
+                    stage,
+                    due_date: stage === 'day_of' ? (event?.date?.split('T')[0] ?? f.due_date) : f.due_date
+                  }))
+                }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pre_event">Pre-event</SelectItem>
@@ -167,7 +174,18 @@ export default function Tasks() {
               </div>
             </div>
             <Input value={form.owner} onChange={e => setForm(f => ({ ...f, owner: e.target.value }))} placeholder="Owner (name or email)" />
-            <Input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} />
+            <div>
+              <label className="text-xs text-smoke-400 mb-1 block">
+                Due date{form.stage === 'day_of' && <span className="ml-1 text-fire-400/70">(locked to event date)</span>}
+              </label>
+              <Input
+                type="date"
+                value={form.due_date}
+                onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
+                disabled={form.stage === 'day_of'}
+                className={form.stage === 'day_of' ? 'opacity-50 cursor-not-allowed' : ''}
+              />
+            </div>
             <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Notes…" className="min-h-[60px]" />
           </div>
           <DialogFooter>
@@ -182,17 +200,20 @@ export default function Tasks() {
   )
 }
 
-function TaskRow({ task, onCycle, onEdit, onDelete }: {
-  task: Task; onCycle: () => void; onEdit: () => void; onDelete: () => void
+function TaskRow({ task, onToggle, onEdit, onDelete }: {
+  task: Task; onToggle: () => void; onEdit: () => void; onDelete: () => void
 }) {
   const StatusIcon = task.status === 'completed' ? CheckCircle2 : task.status === 'in_progress' ? Clock3 : Circle
   const iconColor = task.status === 'completed' ? 'text-emerald-400' : task.status === 'in_progress' ? 'text-amber-400' : 'text-smoke-600'
 
   return (
-    <Card className={cn('p-3 flex items-center gap-3', task.status === 'completed' && 'opacity-60')}>
-      <button onClick={onCycle} className="shrink-0 tap-highlight-none">
+    <Card
+      className={cn('p-3 flex items-center gap-3 cursor-pointer active:scale-[0.99] transition-transform tap-highlight-none', task.status === 'completed' && 'opacity-60')}
+      onClick={onToggle}
+    >
+      <div className="shrink-0">
         <StatusIcon size={20} className={iconColor} />
-      </button>
+      </div>
       <div className="flex-1 min-w-0">
         <p className={cn('text-sm font-medium', task.status === 'completed' ? 'line-through text-smoke-400' : 'text-smoke-100')}>
           {task.title}
@@ -202,9 +223,9 @@ function TaskRow({ task, onCycle, onEdit, onDelete }: {
           {task.due_date && <span className="text-[11px] text-smoke-500">Due {formatDate(task.due_date, 'dd MMM')}</span>}
         </div>
       </div>
-      <div className="flex items-center gap-1 shrink-0">
-        <button onClick={onEdit} className="p-1.5 text-smoke-500 hover:text-smoke-200 tap-highlight-none"><Pencil size={13} /></button>
-        <button onClick={onDelete} className="p-1.5 text-smoke-500 hover:text-red-400 tap-highlight-none"><Trash2 size={13} /></button>
+      <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+        <button onClick={onEdit} className="p-1.5 text-smoke-500 hover:text-smoke-200 tap-highlight-none" aria-label="Edit task"><Pencil size={13} /></button>
+        <button onClick={onDelete} className="p-1.5 text-smoke-500 hover:text-red-400 tap-highlight-none" aria-label="Delete task"><Trash2 size={13} /></button>
       </div>
     </Card>
   )

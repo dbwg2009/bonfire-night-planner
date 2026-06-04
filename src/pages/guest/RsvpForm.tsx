@@ -3,6 +3,7 @@ import { CheckCircle2 } from 'lucide-react'
 import { Card } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
 import { FireBackground } from '../../components/FireBackground'
 import { MilestoneBar } from '../../components/MilestoneBar'
 import { Toaster } from '../../components/ui/toast'
@@ -39,30 +40,46 @@ const COMMON_RESTRICTIONS = [
   { label: '🌱 Vegan', value: 'vegan' },
 ]
 
+type PublicEvent = { id: string; name?: string; contribution_link?: string; contribution_match_ratio: number }
+type InvitedGuest = { id: string; name: string }
+type PickupSlot = { id: string; label: string }
+
 export default function RsvpForm() {
   const storeEvent = useEventStore(s => s.currentEvent)
-  const [publicEvent, setPublicEvent] = useState<{ id: string; name?: string; contribution_link?: string; contribution_match_ratio: number } | null>(null)
+  const [publicEvent, setPublicEvent] = useState<PublicEvent | null>(null)
+  const [invitedGuests, setInvitedGuests] = useState<InvitedGuest[]>([])
+  const [pickupSlots, setPickupSlots] = useState<PickupSlot[]>([])
   const [step, setStep] = useState<'form' | 'done'>('form')
   const [loading, setLoading] = useState(false)
+  const [dataLoading, setDataLoading] = useState(true)
   const [copyVariant] = useState(() => Math.floor(Math.random() * CONTRIBUTION_COPY.length))
   const [milestones, setMilestones] = useState<MilestonesResponse | null>(null)
+  const [selectedGuest, setSelectedGuest] = useState<InvitedGuest | null>(null)
 
   useEffect(() => {
-    fetch('/api/public/event')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (!d) return
-        setPublicEvent(d)
-        return fetch(`/api/public/milestones/${d.id}`)
-          .then(r => r.ok ? r.json() : null)
-          .then(m => m && setMilestones(m))
-      })
-      .catch(() => {})
+    async function load() {
+      try {
+        const evRes = await fetch('/api/public/event')
+        if (!evRes.ok) return
+        const ev = await evRes.json() as PublicEvent
+        setPublicEvent(ev)
+        const [guestsRes, slotsRes, milestonesRes] = await Promise.all([
+          fetch(`/api/public/invited-guests/${ev.id}`).then(r => r.ok ? r.json() : []),
+          fetch(`/api/public/pickup-slots/${ev.id}`).then(r => r.ok ? r.json() : []),
+          fetch(`/api/public/milestones/${ev.id}`).then(r => r.ok ? r.json() : null),
+        ])
+        setInvitedGuests(guestsRes as InvitedGuest[])
+        setPickupSlots(slotsRes as PickupSlot[])
+        if (milestonesRes) setMilestones(milestonesRes as MilestonesResponse)
+      } catch { /* silently ignore */ } finally {
+        setDataLoading(false)
+      }
+    }
+    load()
   }, [])
 
   const event = publicEvent ?? storeEvent
   const [form, setForm] = useState({
-    name: '',
     rsvp_status: 'accepted' as 'accepted' | 'declined',
     dietary: [] as ('burger' | 'sausage')[],
     dietary_restrictions: [] as string[],
@@ -87,12 +104,29 @@ export default function RsvpForm() {
     }))
   }
 
-  async function submit() {
-    if (!form.name.trim()) { toast('Please enter your name', 'error'); return }
+  async function submitDecline() {
+    if (!selectedGuest) { toast('Please select your name', 'error'); return }
     if (!event?.id) { toast('Event not found', 'error'); return }
     setLoading(true)
     try {
-      await api.submitRsvp(event.id, form)
+      const res = await api.submitRsvp(event.id, { guest_id: selectedGuest.id, rsvp_status: 'declined' })
+      if (res.error) { toast(res.error, 'error'); return }
+      setForm(f => ({ ...f, rsvp_status: 'declined' }))
+      setStep('done')
+    } catch {
+      toast('Failed to submit — please try again', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function submitAccept() {
+    if (!selectedGuest) { toast('Please select your name', 'error'); return }
+    if (!event?.id) { toast('Event not found', 'error'); return }
+    setLoading(true)
+    try {
+      const res = await api.submitRsvp(event.id, { guest_id: selectedGuest.id, ...form, rsvp_status: 'accepted' })
+      if (res.error) { toast(res.error, 'error'); return }
       setStep('done')
     } catch {
       toast('Failed to submit — please try again', 'error')
@@ -103,9 +137,7 @@ export default function RsvpForm() {
 
   if (step === 'done') {
     const showContribution = form.rsvp_status === 'accepted' && !!event?.contribution_link
-    const copy = showContribution
-      ? CONTRIBUTION_COPY[copyVariant](form.name)
-      : null
+    const copy = showContribution ? CONTRIBUTION_COPY[copyVariant](selectedGuest?.name ?? '') : null
 
     return (
       <div className="min-h-dvh min-h-screen flex flex-col items-center justify-center relative">
@@ -120,13 +152,11 @@ export default function RsvpForm() {
             <>
               <h1 className="text-2xl font-bold text-smoke-100 mb-3">{copy.heading}</h1>
               <p className="text-smoke-400 text-sm mb-6 leading-relaxed">{copy.body}</p>
-
-              {event.contribution_match_ratio > 0 && (
+              {(event.contribution_match_ratio ?? 0) > 0 && (
                 <p className="text-xs text-fire-400/80 mb-5 leading-relaxed">
                   Contributions are match-funded at {Math.round(event.contribution_match_ratio * 100)}% — so if guests raise £100, we'll put in £{Math.round(100 * event.contribution_match_ratio)} too.
                 </p>
               )}
-
               <a
                 href={event.contribution_link}
                 target="_blank"
@@ -135,8 +165,6 @@ export default function RsvpForm() {
               >
                 Help cover the costs 💛
               </a>
-
-              {/* Milestone bar on contribution screen */}
               {milestones && milestones.milestones.length > 0 && (
                 <div className="mt-6 mb-4 text-left">
                   <MilestoneBar
@@ -148,7 +176,6 @@ export default function RsvpForm() {
                   />
                 </div>
               )}
-
               <a href="/" className="text-smoke-500 text-sm hover:text-smoke-300 transition-colors">
                 No thanks — back to event info
               </a>
@@ -160,8 +187,8 @@ export default function RsvpForm() {
               </h1>
               <p className="text-smoke-400 text-sm mb-6">
                 {form.rsvp_status === 'accepted'
-                  ? `Thanks ${form.name}! Your RSVP has been recorded. We'll be in touch with more details.`
-                  : `Thanks for letting us know, ${form.name}. Hope to see you another time!`
+                  ? `Thanks ${selectedGuest?.name}! Your RSVP has been recorded. We'll be in touch with more details.`
+                  : `Thanks for letting us know, ${selectedGuest?.name}. Hope to see you another time!`
                 }
               </p>
               <a href="/" className="text-fire-400 text-sm hover:text-fire-300 transition-colors">
@@ -169,6 +196,25 @@ export default function RsvpForm() {
               </a>
             </>
           )}
+        </div>
+      </div>
+    )
+  }
+
+  if (!dataLoading && invitedGuests.length === 0) {
+    return (
+      <div className="min-h-dvh min-h-screen flex flex-col items-center justify-center relative">
+        <FireBackground />
+        <Toaster />
+        <div className="relative z-10 text-center px-6 max-w-sm w-full">
+          <span className="text-4xl block mb-4">🔥</span>
+          <h1 className="text-xl font-bold text-smoke-100 mb-2">{event?.name ?? 'Bonfire Night'}</h1>
+          <p className="text-smoke-400 text-sm leading-relaxed">
+            Invites haven't gone out yet — check back soon!
+          </p>
+          <a href="/" className="text-fire-400 text-sm hover:text-fire-300 transition-colors mt-6 block">
+            ← Back to event info
+          </a>
         </div>
       </div>
     )
@@ -188,17 +234,20 @@ export default function RsvpForm() {
 
         <div className="space-y-4">
           <Card>
-            <h2 className="text-sm font-semibold text-smoke-300 mb-3">Your details</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-smoke-400 mb-1 block">Your name *</label>
-                <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name" />
-              </div>
-              <div>
-                <label className="text-xs text-smoke-400 mb-1 block">Emergency contact number</label>
-                <Input value={form.emergency_contact} onChange={e => setForm(f => ({ ...f, emergency_contact: e.target.value }))} placeholder="+44 7700 000000" type="tel" />
-              </div>
-            </div>
+            <h2 className="text-sm font-semibold text-smoke-300 mb-3">Who are you?</h2>
+            <Select
+              value={selectedGuest?.id ?? ''}
+              onValueChange={id => setSelectedGuest(invitedGuests.find(g => g.id === id) ?? null)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select your name…" />
+              </SelectTrigger>
+              <SelectContent>
+                {invitedGuests.map(g => (
+                  <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Card>
 
           <Card>
@@ -220,7 +269,17 @@ export default function RsvpForm() {
             </div>
           </Card>
 
-          {form.rsvp_status === 'accepted' && (
+          {form.rsvp_status === 'declined' ? (
+            <Button
+              onClick={submitDecline}
+              disabled={loading || !selectedGuest}
+              className="w-full"
+              size="lg"
+              variant="outline"
+            >
+              {loading ? 'Submitting…' : "Submit — Can't make it"}
+            </Button>
+          ) : (
             <>
               <Card className="animate-slide-up">
                 <h2 className="text-sm font-semibold text-smoke-300 mb-3">Food preferences</h2>
@@ -269,33 +328,52 @@ export default function RsvpForm() {
                 />
               </Card>
 
+              {pickupSlots.length > 0 && (
+                <Card className="animate-slide-up">
+                  <h2 className="text-sm font-semibold text-smoke-300 mb-1">Pick-up preference</h2>
+                  <p className="text-xs text-amber-400/80 mb-3 flex items-center gap-1">
+                    ⚠️ Preference only — subject to change. We'll confirm nearer the date.
+                  </p>
+                  <Select
+                    value={form.pickup_time}
+                    onValueChange={v => setForm(f => ({ ...f, pickup_time: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select preferred time…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pickupSlots.map(s => (
+                        <SelectItem key={s.id} value={s.label}>{s.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Card>
+              )}
+
               <Card className="animate-slide-up">
-                <h2 className="text-sm font-semibold text-smoke-300 mb-1">Pick-up preference</h2>
-                <p className="text-xs text-amber-400/80 mb-3 flex items-center gap-1">
-                  ⚠️ This is a preference only — subject to change. We'll confirm pick-up times nearer the date.
-                </p>
-                <label className="text-xs text-smoke-400 mb-1 block">Preferred pick-up time (end of night)</label>
+                <h2 className="text-sm font-semibold text-smoke-300 mb-1">Emergency contact</h2>
                 <Input
-                  type="time"
-                  value={form.pickup_time}
-                  onChange={e => setForm(f => ({ ...f, pickup_time: e.target.value }))}
+                  value={form.emergency_contact}
+                  onChange={e => setForm(f => ({ ...f, emergency_contact: e.target.value }))}
+                  placeholder="+44 7700 000000"
+                  type="tel"
                 />
               </Card>
+
+              <Button
+                onClick={submitAccept}
+                disabled={loading || !selectedGuest}
+                className="w-full"
+                size="lg"
+              >
+                {loading ? 'Submitting…' : 'Submit RSVP'}
+              </Button>
+
+              <p className="text-center text-xs text-smoke-500">
+                Your emergency contact is only visible to organisers.
+              </p>
             </>
           )}
-
-          <Button
-            onClick={submit}
-            disabled={loading || !form.name.trim()}
-            className="w-full"
-            size="lg"
-          >
-            {loading ? 'Submitting…' : 'Submit RSVP'}
-          </Button>
-
-          <p className="text-center text-xs text-smoke-500">
-            Your emergency contact is only visible to organisers.
-          </p>
         </div>
       </div>
     </div>

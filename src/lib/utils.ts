@@ -65,7 +65,7 @@ export function formatWhatsApp(text: string): string {
     .replace(/__(.*?)__/g, '_$1_')
 }
 
-export type RsvpStatus = 'pending' | 'accepted' | 'declined'
+export type RsvpStatus = 'in_consideration' | 'invited' | 'accepted' | 'declined'
 export type DietaryOption = 'burger' | 'sausage'
 export type TaskStatus = 'pending' | 'in_progress' | 'completed'
 export type TaskStage = 'pre_event' | 'day_of' | 'post_event'
@@ -74,13 +74,15 @@ export type TransactionType = 'expense' | 'contribution'
 export type TransactionCategory = 'contribution' | 'venue' | 'food' | 'equipment' | 'other'
 
 export const RSVP_LABELS: Record<RsvpStatus, string> = {
-  pending: 'Pending',
+  in_consideration: 'Considering',
+  invited: 'Invited',
   accepted: 'Accepted',
   declined: 'Declined'
 }
 
 export const RSVP_COLORS: Record<RsvpStatus, string> = {
-  pending: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
+  in_consideration: 'text-smoke-400 bg-smoke-600/20 border-smoke-600/30',
+  invited: 'text-blue-400 bg-blue-400/10 border-blue-400/20',
   accepted: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
   declined: 'text-red-400 bg-red-400/10 border-red-400/20'
 }

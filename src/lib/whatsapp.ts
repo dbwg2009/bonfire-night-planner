@@ -50,7 +50,7 @@ export function buildEventInfoMessage(event: Event): string {
 export function buildRsvpSummaryMessage(guests: Guest[], event: Event): string {
   const accepted = guests.filter(g => g.rsvp_status === 'accepted')
   const declined = guests.filter(g => g.rsvp_status === 'declined')
-  const pending = guests.filter(g => g.rsvp_status === 'pending')
+  const awaiting = guests.filter(g => g.rsvp_status === 'invited')
 
   const lines = [
     `🔥 *${event.name} — RSVP Summary*`,
@@ -66,13 +66,13 @@ export function buildRsvpSummaryMessage(guests: Guest[], event: Event): string {
     lines.push('')
   }
 
-  if (pending.length > 0) {
-    lines.push(`⏳ *Awaiting response (${pending.length}):*`)
-    lines.push(...pending.map(g => `• ${g.name}`))
+  if (awaiting.length > 0) {
+    lines.push(`⏳ *Awaiting response (${awaiting.length}):*`)
+    lines.push(...awaiting.map(g => `• ${g.name}`))
     lines.push('')
   }
 
-  lines.push(`_Total invited: ${guests.length}_`)
+  lines.push(`_Total invited: ${guests.filter(g => g.rsvp_status !== 'in_consideration').length}_`)
 
   return lines.join('\n')
 }

@@ -44,7 +44,7 @@ export interface OrgPermissions {
 export interface Guest {
   id: string
   name: string
-  rsvp_status: 'pending' | 'accepted' | 'declined'
+  rsvp_status: 'in_consideration' | 'invited' | 'accepted' | 'declined'
   dietary: ('burger' | 'sausage')[]
   dietary_restrictions: string[]   // allergens / things they can't eat
   dietary_notes?: string           // freeform e.g. "severe nut allergy — epipen"

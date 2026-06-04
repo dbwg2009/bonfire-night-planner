@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { CreditCard, MapPin, Flame, Settings, ChevronRight, LogOut, ListTodo, History, Plus, Trophy } from 'lucide-react'
+import { CreditCard, MapPin, Flame, Settings, ChevronRight, LogOut, ListTodo, History, Plus, Trophy, Car } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Card } from '../../components/ui/card'
 import { PageHeader, PageContent } from '../../components/Layout'
@@ -58,6 +58,15 @@ export default function More() {
       color: 'text-fire-400',
       bg: 'bg-fire-400/10',
       show: canFinance
+    },
+    {
+      label: 'Pickup Times',
+      desc: 'End-of-night collection slots for guests',
+      icon: Car,
+      to: '/admin/pickup',
+      color: 'text-green-400',
+      bg: 'bg-green-400/10',
+      show: true
     },
     {
       label: 'Venue Locations',

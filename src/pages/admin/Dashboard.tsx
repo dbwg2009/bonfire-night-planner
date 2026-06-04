@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card } from '../../components/ui/card'
 import { Countdown } from '../../components/Countdown'
-import { WeatherWidget } from '../../components/WeatherWidget'
+import { WeatherCard, LightLevelsCard } from '../../components/WeatherWidget'
 import { PageContent } from '../../components/Layout'
 import { useAuthStore } from '../../store/auth'
 import { useEventStore } from '../../store/event'
@@ -216,9 +216,16 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Weather — tap to open Light Levels page */}
+        {/* Weather */}
+        <WeatherCard
+          eventDate={bonfireDate}
+          lat={event?.lat}
+          lon={event?.lon}
+        />
+
+        {/* Light Levels — tap to configure */}
         <Link to="/admin/light-levels" className="block tap-highlight-none">
-          <WeatherWidget
+          <LightLevelsCard
             eventDate={bonfireDate}
             lat={event?.lat}
             lon={event?.lon}

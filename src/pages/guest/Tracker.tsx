@@ -4,9 +4,25 @@ import { Loader2 } from 'lucide-react'
 import { FireBackground } from '../../components/FireBackground'
 import { getMilestoneIcon } from '../../components/MilestoneBar'
 import { cn } from '../../lib/utils'
-import type { MilestonesResponse } from '../../lib/types'
+import type { MilestonesResponse, Milestone } from '../../lib/types'
 
 type PublicEvent = { id: string; name?: string; contribution_link?: string; contribution_match_ratio: number }
+
+function TrackerIcon({ milestone, unlocked }: { milestone: Milestone; unlocked: boolean }) {
+  const [imgError, setImgError] = useState(false)
+  const icon = getMilestoneIcon(milestone)
+  if (milestone.icon_image && !imgError) {
+    return (
+      <img
+        src={milestone.icon_image}
+        alt={milestone.name}
+        className={cn('rounded-lg object-cover', unlocked ? 'w-10 h-10' : 'w-7 h-7')}
+        onError={() => setImgError(true)}
+      />
+    )
+  }
+  return <span className="leading-none">{icon}</span>
+}
 
 export default function Tracker() {
   const [data, setData] = useState<MilestonesResponse | null>(null)
@@ -24,6 +40,7 @@ export default function Tracker() {
         setEvent(ev)
         const mRes = await fetch(`/api/public/milestones/${ev.id}`)
         if (mRes.ok) setData(await mRes.json() as MilestonesResponse)
+        else setError(true)
       } catch { setError(true) } finally {
         setLoading(false)
       }
@@ -35,7 +52,7 @@ export default function Tracker() {
     if (!data) return
     const raf = requestAnimationFrame(() => {
       setTimeout(() => {
-        const max = data.milestones.length > 0 ? data.milestones[data.milestones.length - 1].amount : 1
+        const max = data.milestones.length > 0 ? Math.max(...data.milestones.map(m => m.amount)) : 1
         setAnimatedPct(Math.min((data.total_raised / max) * 100, 100))
       }, 100)
     })
@@ -146,8 +163,6 @@ export default function Tracker() {
             const topPct = positions[i]
             const unlocked = totalRaised >= m.amount
             const isLeft = i % 2 === 0
-            const icon = getMilestoneIcon(m)
-            const hasImage = !!m.icon_image
 
             return (
               <div key={m.id} className="absolute w-full" style={{ top: `${topPct}%` }}>
@@ -163,11 +178,7 @@ export default function Tracker() {
                     background: unlocked ? 'linear-gradient(135deg, #e85f00, #fbbf24)' : 'rgba(10, 5, 0, 0.92)',
                   }}
                 >
-                  {hasImage ? (
-                    <img src={m.icon_image} alt={m.name} className={cn('rounded-lg object-cover', unlocked ? 'w-10 h-10' : 'w-7 h-7')} />
-                  ) : (
-                    <span className="leading-none">{icon}</span>
-                  )}
+                  <TrackerIcon milestone={m} unlocked={unlocked} />
                 </div>
 
                 {/* Card — left or right of centre */}

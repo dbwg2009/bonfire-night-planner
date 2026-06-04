@@ -42,6 +42,13 @@ function EventGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function FinanceGuard({ children }: { children: React.ReactNode }) {
+  const organiser = useAuthStore(s => s.organiser)
+  const canFinance = !!organiser && (organiser.is_owner || organiser.permissions.finance)
+  if (!canFinance) return <Navigate to="/admin/more" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -75,7 +82,7 @@ export default function App() {
             <Route path="locations" element={<Locations />} />
             <Route path="conflict-event" element={<ConflictEvent />} />
             <Route path="settings" element={<Settings />} />
-            <Route path="milestones" element={<Milestones />} />
+            <Route path="milestones" element={<FinanceGuard><Milestones /></FinanceGuard>} />
             <Route path="more" element={<More />} />
           </Route>
 

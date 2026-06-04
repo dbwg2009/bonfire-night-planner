@@ -38,6 +38,8 @@ export default function Milestones() {
   const [form, setForm] = useState(defaultForm())
   const [emojiInput, setEmojiInput] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  const parsedAmount = Number(form.amountGbp)
+  const isValidAmount = Number.isFinite(parsedAmount) && parsedAmount > 0
 
   const eventId = event?.id ?? ''
 
@@ -53,11 +55,13 @@ export default function Milestones() {
 
   const save = useMutation({
     mutationFn: async (f: typeof form) => {
+      const amountGbp = Number(f.amountGbp)
+      if (!Number.isFinite(amountGbp) || amountGbp <= 0) throw new Error('Milestone target must be greater than 0')
       const payload = {
         id: editing?.id ?? generateId(),
         name: f.name,
         description: f.description,
-        amount: Math.round(parseFloat(f.amountGbp) * 100),
+        amount: Math.round(amountGbp * 100),
         emoji: iconTab === 'emoji' ? f.emoji : '',
         icon_preset: iconTab === 'preset' ? f.icon_preset : '',
         icon_image: iconTab === 'image' ? f.icon_image : '',
@@ -328,7 +332,7 @@ export default function Milestones() {
 
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={() => save.mutate(form)} disabled={!form.name.trim() || !form.amountGbp || save.isPending}>
+            <Button onClick={() => save.mutate(form)} disabled={!form.name.trim() || !isValidAmount || save.isPending}>
               {save.isPending ? 'Saving…' : editing ? 'Save changes' : 'Add Milestone'}
             </Button>
           </DialogFooter>

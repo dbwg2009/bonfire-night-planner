@@ -17,6 +17,7 @@ import Finance from './pages/admin/Finance'
 import Locations from './pages/admin/Locations'
 import ConflictEvent from './pages/admin/ConflictEvent'
 import Settings from './pages/admin/Settings'
+import Milestones from './pages/admin/Milestones'
 import More from './pages/admin/More'
 import GuestDashboard from './pages/guest/GuestDashboard'
 import RsvpForm from './pages/guest/RsvpForm'
@@ -38,6 +39,13 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
 function EventGuard({ children }: { children: React.ReactNode }) {
   const event = useEventStore(s => s.currentEvent)
   if (!event) return <Navigate to="/setup" replace />
+  return <>{children}</>
+}
+
+function FinanceGuard({ children }: { children: React.ReactNode }) {
+  const organiser = useAuthStore(s => s.organiser)
+  const canFinance = !!organiser && (organiser.is_owner || organiser.permissions.finance)
+  if (!canFinance) return <Navigate to="/admin/more" replace />
   return <>{children}</>
 }
 
@@ -74,6 +82,7 @@ export default function App() {
             <Route path="locations" element={<Locations />} />
             <Route path="conflict-event" element={<ConflictEvent />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="milestones" element={<FinanceGuard><Milestones /></FinanceGuard>} />
             <Route path="more" element={<More />} />
           </Route>
 

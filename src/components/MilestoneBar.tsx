@@ -12,7 +12,7 @@ export function getMilestoneIcon(m: Milestone): string {
 interface Props {
   milestones: Milestone[]
   totalRaisedPence: number
-  compact?: boolean // show only important milestones when true and they don't all fit
+  compact?: boolean
   onViewAll?: () => void
   showViewAll?: boolean
 }
@@ -21,7 +21,6 @@ export function MilestoneBar({ milestones, totalRaisedPence, compact = false, on
   const [animatedPct, setAnimatedPct] = useState(0)
   const [newlyUnlocked, setNewlyUnlocked] = useState<Set<string>>(new Set())
   const prevUnlockedRef = useRef<Set<string>>(new Set())
-  const barRef = useRef<HTMLDivElement>(null)
 
   const sorted = [...milestones].sort((a, b) => a.amount - b.amount)
   const shouldShowAll = sorted.every(m => m.important) || sorted.length <= 5
@@ -33,7 +32,6 @@ export function MilestoneBar({ milestones, totalRaisedPence, compact = false, on
 
   const milestoneKey = sorted.map(m => `${m.id}:${m.amount}`).join(',')
 
-  // Determine newly unlocked milestones (unlocked now but not before animation started)
   useEffect(() => {
     const nowUnlocked = new Set(sorted.filter(m => totalRaisedPence >= m.amount).map(m => m.id))
     const prev = prevUnlockedRef.current
@@ -42,7 +40,6 @@ export function MilestoneBar({ milestones, totalRaisedPence, compact = false, on
     prevUnlockedRef.current = nowUnlocked
   }, [totalRaisedPence, milestoneKey])
 
-  // Animate fill on mount
   useEffect(() => {
     const timer = setTimeout(() => setAnimatedPct(targetPct), 80)
     return () => clearTimeout(timer)
@@ -56,143 +53,55 @@ export function MilestoneBar({ milestones, totalRaisedPence, compact = false, on
   const raisedGbp = (totalRaisedPence / 100).toFixed(0)
   const maxGbp = (maxAmount / 100).toFixed(0)
 
+  // Even-index milestones sit above the bar, odd-index below (first milestone is above)
+  const aboveIcons = displayed.filter((_, i) => i % 2 === 0)
+  const belowIcons = displayed.filter((_, i) => i % 2 !== 0)
+
   return (
     <div className="space-y-3">
-      {/* Amount raised */}
       <div className="flex items-baseline justify-between">
         <span className="text-lg font-bold text-gradient-fire">£{raisedGbp} raised</span>
         <span className="text-xs text-smoke-400">of £{maxGbp} goal</span>
       </div>
 
-      {/* Bar track + icons */}
-      <div className="relative" ref={barRef}>
-        {/* Icons above bar — alternating positions */}
-        <div className="relative h-10 mb-1">
-          {displayed.map((m, i) => {
-            const pct = pctFor(m)
-            const unlocked = isUnlocked(m)
-            const isLast = m.id === sorted[sorted.length - 1].id
-            const isNew = newlyUnlocked.has(m.id)
-            // Final milestone sits on the bar end, others alternate above
-            if (isLast) return null
-            if (i % 2 !== 0) return null // only even indices above
-            return (
-              <MilestoneIcon
-                key={m.id}
-                milestone={m}
-                pct={pct}
-                unlocked={unlocked}
-                isNew={isNew}
-                position="above"
-              />
-            )
-          })}
+      <div className="relative">
+        {/* Icons above bar */}
+        <div className="relative h-11 mb-2">
+          {aboveIcons.map(m => (
+            <BarIcon key={m.id} milestone={m} pct={pctFor(m)} unlocked={isUnlocked(m)} isNew={newlyUnlocked.has(m.id)} align="bottom" />
+          ))}
         </div>
 
-        {/* The bar itself */}
-        <div className="relative h-3 rounded-full bg-white/8 overflow-hidden">
-          {/* Fill */}
+        {/* Bar track */}
+        <div className="relative h-3 rounded-full bg-white/8">
           <div
             className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000 ease-out"
-            style={{
-              width: `${animatedPct}%`,
-              background: 'linear-gradient(90deg, #e85f00, #fbbf24)',
-            }}
+            style={{ width: `${animatedPct}%`, background: 'linear-gradient(90deg, #e85f00, #fbbf24)' }}
           />
-          {/* Pulsing leading edge */}
           {!allFunded && animatedPct > 0 && (
             <div
               className="absolute inset-y-0 w-3 rounded-full animate-pulse-glow transition-all duration-1000 ease-out"
-              style={{
-                left: `calc(${animatedPct}% - 6px)`,
-                background: 'radial-gradient(circle, #fbbf24 0%, transparent 70%)',
-                opacity: 0.8
-              }}
+              style={{ left: `calc(${animatedPct}% - 6px)`, background: 'radial-gradient(circle, #fbbf24 0%, transparent 70%)', opacity: 0.8 }}
             />
           )}
-          {/* Milestone tick marks */}
-          {displayed.map(m => {
-            const isLast = m.id === sorted[sorted.length - 1].id
-            if (isLast) return null
-            return (
-              <div
-                key={m.id}
-                className="absolute inset-y-0 w-0.5 bg-black/20"
-                style={{ left: `${pctFor(m)}%` }}
-              />
-            )
-          })}
         </div>
 
-        {/* Icons below bar — alternating, + final milestone on bar end */}
-        <div className="relative h-10 mt-1">
-          {displayed.map((m, i) => {
-            const pct = pctFor(m)
-            const unlocked = isUnlocked(m)
-            const isLast = m.id === sorted[sorted.length - 1].id
-            const isNew = newlyUnlocked.has(m.id)
-            if (isLast) {
-              // Final milestone sits on the bar end, inline
-              return (
-                <MilestoneIcon
-                  key={m.id}
-                  milestone={m}
-                  pct={pct}
-                  unlocked={unlocked}
-                  isNew={isNew}
-                  position="inline"
-                />
-              )
-            }
-            if (i % 2 !== 1) return null // only odd indices below
-            return (
-              <MilestoneIcon
-                key={m.id}
-                milestone={m}
-                pct={pct}
-                unlocked={unlocked}
-                isNew={isNew}
-                position="below"
-              />
-            )
-          })}
-        </div>
-
-        {/* Amount labels */}
-        <div className="relative h-4">
-          {displayed.map(m => {
-            return (
-              <span
-                key={m.id}
-                className={cn(
-                  'absolute text-[10px] -translate-x-1/2 transition-colors',
-                  isUnlocked(m) ? 'text-fire-400' : 'text-smoke-600'
-                )}
-                style={{ left: `${pctFor(m)}%` }}
-                title={m.name}
-              >
-                £{(m.amount / 100).toFixed(0)}
-              </span>
-            )
-          })}
+        {/* Icons below bar */}
+        <div className="relative h-11 mt-2">
+          {belowIcons.map(m => (
+            <BarIcon key={m.id} milestone={m} pct={pctFor(m)} unlocked={isUnlocked(m)} isNew={newlyUnlocked.has(m.id)} align="top" />
+          ))}
         </div>
       </div>
 
-      {/* Fully funded celebration */}
       {allFunded && (
         <div className="text-center py-2">
-          <span className="text-sm font-semibold text-gradient-fire animate-pulse-glow">
-            🎆 Fully funded! Thank you! 🎆
-          </span>
+          <span className="text-sm font-semibold text-gradient-fire animate-pulse-glow">🎆 Fully funded! Thank you! 🎆</span>
         </div>
       )}
 
-      {/* View full tracker link */}
       {showViewAll && onViewAll && (
-        <button
-          onClick={onViewAll}
-          className="text-xs text-fire-400 hover:text-fire-300 transition-colors tap-highlight-none"
-        >
+        <button onClick={onViewAll} className="text-xs text-fire-400 hover:text-fire-300 transition-colors tap-highlight-none">
           View full tracker →
         </button>
       )}
@@ -200,49 +109,39 @@ export function MilestoneBar({ milestones, totalRaisedPence, compact = false, on
   )
 }
 
-function MilestoneIcon({
-  milestone, pct, unlocked, isNew, position
+function BarIcon({
+  milestone, pct, unlocked, isNew, align
 }: {
   milestone: Milestone
   pct: number
   unlocked: boolean
   isNew: boolean
-  position: 'above' | 'below' | 'inline'
+  align: 'top' | 'bottom'
 }) {
   const icon = getMilestoneIcon(milestone)
   const hasImage = !!milestone.icon_image
   const [imgError, setImgError] = useState(false)
 
-  const sizeClass = unlocked ? 'w-8 h-8 text-base' : 'w-6 h-6 text-sm'
-  const topStyle = position === 'above'
-    ? { bottom: 0, left: `${pct}%`, transform: 'translateX(-50%)' }
-    : position === 'below'
-      ? { top: 0, left: `${pct}%`, transform: 'translateX(-50%)' }
-      : { top: '50%', left: `${pct}%`, transform: 'translate(-50%, -50%)' } // inline on bar end
-
   return (
     <div
       className={cn(
-        'absolute flex items-center justify-center rounded-full border-2 transition-all duration-500',
-        unlocked
-          ? cn('border-fire-400/60 glow-fire-sm', isNew && 'animate-bounce')
-          : 'border-smoke-700 opacity-50 grayscale',
-        sizeClass
+        'w-9 h-9 flex items-center justify-center rounded-xl border transition-all duration-500',
+        unlocked ? cn('border-fire-400/40', isNew && 'scale-110') : 'border-smoke-700/60 opacity-50 grayscale'
       )}
-      style={topStyle}
-      title={`${milestone.name} — £${(milestone.amount / 100).toFixed(0)}`}
+      title={milestone.name}
+      style={{
+        position: 'absolute',
+        left: `${pct}%`,
+        transform: 'translateX(-50%)',
+        [align]: 0,
+        background: unlocked ? 'linear-gradient(135deg, #e85f00, #fbbf24)' : 'rgba(255,255,255,0.04)',
+      }}
     >
       {hasImage && !imgError ? (
-        <img
-          src={milestone.icon_image}
-          alt={milestone.name}
-          className={cn('rounded-full object-cover', unlocked ? 'w-7 h-7' : 'w-5 h-5')}
-          onError={() => setImgError(true)}
-        />
+        <img src={milestone.icon_image} alt={milestone.name} className="w-7 h-7 rounded-lg object-cover" onError={() => setImgError(true)} />
       ) : (
-        <span className="leading-none">{icon}</span>
+        <span className="text-base leading-none">{icon}</span>
       )}
     </div>
   )
 }
-

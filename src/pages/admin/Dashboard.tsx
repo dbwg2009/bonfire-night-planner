@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom'
 import {
   Users, UtensilsCrossed, ListTodo, CreditCard, MapPin,
-  CheckSquare, Calendar, Settings, LogOut, ChevronRight, Car, Trophy
+  CheckSquare, Calendar, Settings, LogOut, ChevronRight, Car, Trophy, CheckCheck
 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card } from '../../components/ui/card'
 import { Countdown } from '../../components/Countdown'
 import { WeatherWidget } from '../../components/WeatherWidget'
@@ -11,13 +11,20 @@ import { PageContent } from '../../components/Layout'
 import { useAuthStore } from '../../store/auth'
 import { useEventStore } from '../../store/event'
 import { api } from '../../lib/api'
-import { getBonfireDate } from '../../lib/utils'
+import { getBonfireDate, timeAgo } from '../../lib/utils'
 import type { Guest, Task, MilestonesResponse } from '../../lib/types'
+
+const NOTIF_ICONS: Record<string, string> = {
+  rsvp_accepted: '✅',
+  rsvp_declined: '❌',
+  rsvp_cancelled: '🚫',
+}
 
 export default function Dashboard() {
   const organiser = useAuthStore(s => s.organiser)
   const logout = useAuthStore(s => s.logout)
   const event = useEventStore(s => s.currentEvent)
+  const qc = useQueryClient()
 
   const year = event?.year ?? new Date().getFullYear()
   const bonfireDate = event ? new Date(event.date) : getBonfireDate(year)
@@ -45,6 +52,20 @@ export default function Dashboard() {
     queryFn: () => api.getMilestones(event!.id),
     enabled: !!event?.id
   })
+
+  const { data: notifications = [] } = useQuery({
+    queryKey: ['notifications', event?.id],
+    queryFn: () => api.getNotifications(event!.id),
+    enabled: !!event?.id,
+    refetchInterval: 30_000,
+  })
+
+  const markRead = useMutation({
+    mutationFn: () => api.markNotificationsRead(event!.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+
+  const unreadCount = notifications.filter((n: { read: number }) => n.read === 0).length
 
   const accepted = guests.filter(g => g.rsvp_status === 'accepted').length
   const declined = guests.filter(g => g.rsvp_status === 'declined').length
@@ -105,6 +126,48 @@ export default function Dashboard() {
             <StatPill label="Declined" value={declined} color="text-red-400" bg="bg-red-500/10" />
             <StatPill label="Pending" value={pending} color="text-amber-400" bg="bg-amber-500/10" />
           </div>
+        </Card>
+
+        {/* Notifications */}
+        <Card>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-smoke-300">Notifications</h2>
+              {unreadCount > 0 && (
+                <span className="w-4 h-4 bg-fire-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center leading-none">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </div>
+            {unreadCount > 0 && (
+              <button
+                onClick={() => markRead.mutate()}
+                className="flex items-center gap-1 text-xs text-smoke-500 hover:text-smoke-300 transition-colors"
+              >
+                <CheckCheck size={12} />
+                Mark all read
+              </button>
+            )}
+          </div>
+          {notifications.length === 0 ? (
+            <p className="text-sm text-smoke-500 text-center py-3">No notifications yet</p>
+          ) : (
+            <div className="space-y-0 -mx-4 -mb-4">
+              {notifications.slice(0, 5).map((n: { id: string; type: string; message: string; created_at: string; read: number }) => (
+                <div
+                  key={n.id}
+                  className={`flex items-start gap-3 px-4 py-3 border-t border-white/[0.04] ${n.read === 0 ? 'bg-white/[0.03]' : ''}`}
+                >
+                  <span className="text-base shrink-0 mt-0.5">{NOTIF_ICONS[n.type] ?? '🔔'}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-smoke-200 leading-snug">{n.message}</p>
+                    <p className="text-xs text-smoke-500 mt-0.5">{timeAgo(n.created_at)}</p>
+                  </div>
+                  {n.read === 0 && <span className="w-1.5 h-1.5 rounded-full bg-fire-400 shrink-0 mt-1.5" />}
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
 
         {/* Task progress */}

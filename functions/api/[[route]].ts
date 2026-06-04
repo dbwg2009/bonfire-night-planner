@@ -329,12 +329,21 @@ app.put('/api/events/:id', requireAuth(async (c, org) => {
   }
   const str = (v: unknown, maxLen = 500) =>
     typeof v === 'string' ? v.trim().slice(0, maxLen) : ''
+  const toBoolInt = (v: unknown) =>
+    v === true || v === 1 || v === '1' || v === 'true' ? 1 : 0
+  const isValidIsoDate = (v: string) => {
+    if (!DATE_RE.test(v)) return false
+    const [y, m, d] = v.split('-').map(Number)
+    if (m < 1 || m > 12) return false
+    const maxDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
+    return d >= 1 && d <= maxDay
+  }
 
   const name = str(body.name, 200)
   if (!name) return c.json({ error: 'name is required' }, 400)
 
   const date = str(body.date)
-  if (!DATE_RE.test(date)) return c.json({ error: 'date must be YYYY-MM-DD' }, 400)
+  if (!isValidIsoDate(date)) return c.json({ error: 'date must be a valid YYYY-MM-DD' }, 400)
 
   // lat/lon: out-of-range or non-numeric → null (don't error, just clear)
   const parsedLat = body.lat === '' || body.lat == null ? null : Number(body.lat)
@@ -357,8 +366,8 @@ app.put('/api/events/:id', requireAuth(async (c, org) => {
   const meetingLocation  = str(body.meeting_location)
   const eventLocation    = str(body.event_location)
   const conflictName     = str(body.conflict_event_name)
-  const lightWalkBy      = typeof body.light_walk_by      === 'string' && TIME_RE.test(body.light_walk_by)      ? body.light_walk_by      : ''
-  const lightFireworks   = typeof body.light_fireworks_after === 'string' && TIME_RE.test(body.light_fireworks_after) ? body.light_fireworks_after : ''
+  const lightWalkBy    = TIME_RE.test(str(body.light_walk_by, 5))      ? str(body.light_walk_by, 5)      : ''
+  const lightFireworks = TIME_RE.test(str(body.light_fireworks_after, 5)) ? str(body.light_fireworks_after, 5) : ''
   const lightNotes       = str(body.light_notes)
   const contributionLink = typeof body.contribution_link === 'string' && body.contribution_link.trim()
     ? body.contribution_link.trim().slice(0, 500) : null

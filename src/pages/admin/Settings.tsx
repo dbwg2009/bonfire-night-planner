@@ -37,6 +37,9 @@ export default function Settings() {
     light_notes: event?.light_notes ?? '',
     lat: event?.lat ?? '',
     lon: event?.lon ?? '',
+    setup_duration_mins: event?.setup_duration_mins ?? 30,
+    slider_time_start: event?.slider_time_start ?? '00:00',
+    slider_time_end: event?.slider_time_end ?? '23:59',
     contribution_link: event?.contribution_link ?? '',
     contribution_match_ratio: event?.contribution_match_ratio ?? 0
   })
@@ -172,6 +175,23 @@ export default function Settings() {
             <div>
               <label className="text-xs text-smoke-400 mb-1 block">Notes</label>
               <Input value={eventForm.light_notes} onChange={e => setEventForm(f => ({ ...f, light_notes: e.target.value }))} placeholder="e.g. Sunset around 16:30 — arrive before dark" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-smoke-400 mb-1 block">⏱ Setup time (mins)</label>
+                <Input type="number" min={0} max={180} value={eventForm.setup_duration_mins} onChange={e => setEventForm(f => ({ ...f, setup_duration_mins: Number(e.target.value) }))} placeholder="30" />
+                <p className="text-[11px] text-smoke-500 mt-0.5">Time needed to set up at venue</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-smoke-400 mb-1 block">🕐 Slider start</label>
+                <Input type="time" value={eventForm.slider_time_start} onChange={e => setEventForm(f => ({ ...f, slider_time_start: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs text-smoke-400 mb-1 block">🕐 Slider end</label>
+                <Input type="time" value={eventForm.slider_time_end} onChange={e => setEventForm(f => ({ ...f, slider_time_end: e.target.value }))} />
+              </div>
             </div>
           </div>
         </Card>

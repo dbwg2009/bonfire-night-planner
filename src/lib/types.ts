@@ -20,6 +20,10 @@ export interface Event {
   lon?: number                // Event location lon
   contribution_link?: string  // Payment URL (monzo.me, etc.) shown to guests
   contribution_match_ratio: number // 0 = no match, 0.5 = match 50%, etc.
+  // Light levels slider settings
+  setup_duration_mins?: number    // minutes needed for setup at venue, default 30
+  slider_time_start?: string      // slider left bound e.g. "00:00"
+  slider_time_end?: string        // slider right bound e.g. "23:59"
   created_at: string
   updated_at: string
 }

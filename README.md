@@ -44,9 +44,18 @@ npm run db:create
 Copy the `database_id` from the output and paste it into `wrangler.toml` replacing the placeholder.
 
 ### 3. Run migrations
+Applies every migration in `migrations/` via the tracked runner (`wrangler d1 migrations apply`), which records applied migrations in a `d1_migrations` table and only ever runs new ones.
 ```bash
-npm run db:migrate:prod
+npm run db:migrate:prod      # apply all pending migrations to production
+npm run db:migrate:status    # list which migrations are still unapplied on prod
 ```
+> **Migrations do not run automatically on deploy.** A Pages build ships code only — re-run `npm run db:migrate:prod` whenever you merge a change that adds a migration, or saves will 500 with `no such column`.
+>
+> **Already have a database that was migrated the old way** (ad-hoc `wrangler d1 execute`)? Reconcile it once so the tracked runner doesn't re-run old migrations:
+> ```bash
+> npm run db:reconcile:prod   # mark already-applied migrations as tracked
+> npm run db:migrate:prod     # then apply only the genuinely-missing ones
+> ```
 
 ### 4. Connect to Cloudflare Pages
 1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **Create** → **Pages** → **Connect to Git**

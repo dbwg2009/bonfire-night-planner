@@ -8,10 +8,13 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "pages:dev": "wrangler pages dev dist --d1=DB",
+    "pages:dev": "wrangler pages dev dist",
     "db:create": "wrangler d1 create bonfire-night-db",
-    "db:migrate": "wrangler d1 execute bonfire-night-db --local --file=./migrations/0001_schema.sql",
-    "db:migrate:prod": "wrangler d1 execute bonfire-night-db --remote --file=./migrations/0001_schema.sql"
+    "db:migrate": "wrangler d1 migrations apply bonfire-night-db --local",
+    "db:migrate:prod": "wrangler d1 migrations apply bonfire-night-db --remote",
+    "db:migrate:status": "wrangler d1 migrations list bonfire-night-db --remote",
+    "db:reconcile": "wrangler d1 execute bonfire-night-db --local --file=./scripts/reconcile-d1-migrations.sql",
+    "db:reconcile:prod": "wrangler d1 execute bonfire-night-db --remote --file=./scripts/reconcile-d1-migrations.sql"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",

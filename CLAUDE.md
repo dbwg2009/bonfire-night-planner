@@ -59,13 +59,23 @@ Build: `npm run build` (runs `tsc -b && vite build`)
 - **D1 (SQLite)** — no JSON columns, no native arrays. Store lists as comma-separated strings or in a related table.
 - Migrations live in `migrations/` as numbered SQL files: `0001_xxx.sql`, `0002_xxx.sql`, etc.
 - The D1 database name is **`bonfire-night-db`**.
-- Apply migrations manually:
+- **Apply migrations with the tracked runner** (records applied migrations in the `d1_migrations` table and runs only new ones — never re-runs old ones):
   ```bash
-  npx wrangler d1 execute bonfire-night-db --file=migrations/00XX_name.sql
-  npx wrangler d1 execute bonfire-night-db --file=migrations/00XX_name.sql --remote   # production
+  npm run db:migrate          # local  (wrangler d1 migrations apply --local)
+  npm run db:migrate:prod     # production (--remote)
+  npm run db:migrate:status   # list which migrations are still unapplied on prod
   ```
-- Always create a numbered migration file for every schema change — never modify the DB schema ad hoc.
+- **⚠️ Migrations do NOT run automatically on deploy.** A Cloudflare Pages build ships *code* only — the schema is untouched until you run `db:migrate:prod`. Forgetting this is the classic cause of a 500 ("no such column") on save after merging a feature that added a column.
+- Always create a numbered migration file for every schema change — never modify the DB schema ad hoc. Use only additive `ALTER TABLE ADD COLUMN` / `CREATE TABLE` so the tracked runner stays append-only.
 - Flag DB migrations in PR descriptions so they are easy to spot.
+
+### One-time reconciliation (already done on prod once)
+The project switched from ad-hoc `wrangler d1 execute` to the tracked runner. Any database that had migrations applied the *old* way must be reconciled once so the runner doesn't try to re-run already-applied migrations:
+```bash
+npm run db:reconcile:prod   # marks already-present migrations as applied in d1_migrations
+npm run db:migrate:prod     # then runs only the genuinely-missing ones
+```
+`scripts/reconcile-d1-migrations.sql` is self-detecting and idempotent — it marks a migration applied only if its signature column/table actually exists. A brand-new database needs no reconciliation; just run `db:migrate`.
 
 ---
 

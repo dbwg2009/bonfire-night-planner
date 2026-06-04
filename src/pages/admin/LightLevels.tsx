@@ -136,7 +136,7 @@ function computeSmartTiming(
   // Setup deadline = halfway between civil dusk and nautical dusk
   const civilDusk    = valid(times.dusk)        ? times.dusk        : null
   const nauticalDusk = valid(times.nauticalDusk) ? times.nauticalDusk : null
-  const astDusk      = valid(times.nightStart)   ? times.nightStart  : null  // 18° below
+  const astDusk      = valid(times.night)        ? times.night       : null  // 18° below
 
   const setupDeadline = civilDusk && nauticalDusk
     ? new Date((civilDusk.getTime() + nauticalDusk.getTime()) / 2)

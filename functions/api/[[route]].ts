@@ -294,8 +294,8 @@ app.put('/api/events/:id', requireAuth(async (c, org) => {
   if (!org.is_owner && !org.permissions?.tasks_and_settings) return c.json({ error: 'Forbidden' }, 403)
   const body = await c.req.json()
   await c.env.DB.prepare(
-    'UPDATE events SET name=?, date=?, meeting_location=?, event_location=?, conflict_event_enabled=?, conflict_event_name=?, food_split_ratio=?, food_buffer_factor=?, contribution_link=?, contribution_match_ratio=?, updated_at=datetime("now") WHERE id=?'
-  ).bind(body.name, body.date, body.meeting_location ?? '', body.event_location ?? '', body.conflict_event_enabled ? 1 : 0, body.conflict_event_name ?? '', body.food_split_ratio ?? 0.6, body.food_buffer_factor ?? 1.1, body.contribution_link ?? null, body.contribution_match_ratio ?? 0, c.req.param('id')).run()
+    'UPDATE events SET name=?, date=?, meeting_location=?, event_location=?, conflict_event_enabled=?, conflict_event_name=?, food_split_ratio=?, food_buffer_factor=?, contribution_link=?, contribution_match_ratio=?, light_walk_by=?, light_fireworks_after=?, light_notes=?, lat=?, lon=?, updated_at=datetime("now") WHERE id=?'
+  ).bind(body.name, body.date, body.meeting_location ?? '', body.event_location ?? '', body.conflict_event_enabled ? 1 : 0, body.conflict_event_name ?? '', body.food_split_ratio ?? 0.6, body.food_buffer_factor ?? 1.1, body.contribution_link ?? null, body.contribution_match_ratio ?? 0, body.light_walk_by ?? '', body.light_fireworks_after ?? '', body.light_notes ?? '', body.lat ?? null, body.lon ?? null, c.req.param('id')).run()
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(c.req.param('id')).first()
   return c.json(mapEvent(event as Record<string, unknown>))
 }))
@@ -407,16 +407,16 @@ app.get('/api/events/:eventId/schedule', requireAuth(async (c) => {
 
 app.post('/api/events/:eventId/schedule', requireAuth(async (c) => {
   const body = await c.req.json()
-  await c.env.DB.prepare('INSERT INTO schedule_items (id, title, activity_type, start_time, end_time, location, owner, notes, sort_order, event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(body.id, body.title, body.activity_type ?? '', body.start_time ?? '', body.end_time ?? '', body.location ?? '', body.owner ?? '', body.notes ?? '', body.sort_order ?? 0, c.req.param('eventId')).run()
+  await c.env.DB.prepare('INSERT INTO schedule_items (id, title, activity_type, start_time, end_time, location, owner, notes, sort_order, light_level_target, event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(body.id, body.title, body.activity_type ?? '', body.start_time ?? '', body.end_time ?? '', body.location ?? '', body.owner ?? '', body.notes ?? '', body.sort_order ?? 0, body.light_level_target ?? null, c.req.param('eventId')).run()
   const item = await c.env.DB.prepare('SELECT * FROM schedule_items WHERE id = ?').bind(body.id).first()
   return c.json(item)
 }))
 
 app.put('/api/events/:eventId/schedule/:id', requireAuth(async (c) => {
   const body = await c.req.json()
-  await c.env.DB.prepare('UPDATE schedule_items SET title=?, activity_type=?, start_time=?, end_time=?, location=?, owner=?, notes=?, sort_order=? WHERE id=? AND event_id=?')
-    .bind(body.title, body.activity_type ?? '', body.start_time ?? '', body.end_time ?? '', body.location ?? '', body.owner ?? '', body.notes ?? '', body.sort_order ?? 0, c.req.param('id'), c.req.param('eventId')).run()
+  await c.env.DB.prepare('UPDATE schedule_items SET title=?, activity_type=?, start_time=?, end_time=?, location=?, owner=?, notes=?, sort_order=?, light_level_target=? WHERE id=? AND event_id=?')
+    .bind(body.title, body.activity_type ?? '', body.start_time ?? '', body.end_time ?? '', body.location ?? '', body.owner ?? '', body.notes ?? '', body.sort_order ?? 0, body.light_level_target ?? null, c.req.param('id'), c.req.param('eventId')).run()
   const item = await c.env.DB.prepare('SELECT * FROM schedule_items WHERE id = ?').bind(c.req.param('id')).first()
   return c.json(item)
 }))

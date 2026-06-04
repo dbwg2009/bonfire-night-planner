@@ -40,6 +40,12 @@ const COMMON_RESTRICTIONS = [
   { label: '🌱 Vegan', value: 'vegan' },
 ]
 
+function setRsvpCookie() {
+  const expires = new Date()
+  expires.setMonth(expires.getMonth() + 6)
+  document.cookie = `rsvp_submitted=1; expires=${expires.toUTCString()}; path=/; SameSite=Lax`
+}
+
 type PublicEvent = { id: string; name?: string; contribution_link?: string; contribution_match_ratio: number }
 type InvitedGuest = { id: string; name: string }
 type PickupSlot = { id: string; label: string }
@@ -111,6 +117,7 @@ export default function RsvpForm() {
     try {
       const res = await api.submitRsvp(event.id, { guest_id: selectedGuest.id, rsvp_status: 'declined' })
       if (res.error) { toast(res.error, 'error'); return }
+      setRsvpCookie()
       setForm(f => ({ ...f, rsvp_status: 'declined' }))
       setStep('done')
     } catch {
@@ -127,6 +134,7 @@ export default function RsvpForm() {
     try {
       const res = await api.submitRsvp(event.id, { guest_id: selectedGuest.id, ...form, rsvp_status: 'accepted' })
       if (res.error) { toast(res.error, 'error'); return }
+      setRsvpCookie()
       setStep('done')
     } catch {
       toast('Failed to submit — please try again', 'error')

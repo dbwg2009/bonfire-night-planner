@@ -12,9 +12,14 @@ import type { Event, Guest, MilestonesResponse } from '../../lib/types'
 
 type PublicGuest = Pick<Guest, 'id' | 'name' | 'rsvp_status' | 'dietary' | 'pickup_time'>
 
+function hasRsvpCookie() {
+  return document.cookie.split(';').some(c => c.trim().startsWith('rsvp_submitted='))
+}
+
 export default function GuestDashboard() {
   const [event, setEvent] = useState<Event | null>(null)
   const [myGuest, setMyGuest] = useState<PublicGuest | null>(null)
+  const [alreadyRsvpd] = useState(() => hasRsvpCookie())
   const [milestones, setMilestones] = useState<MilestonesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
@@ -86,6 +91,19 @@ export default function GuestDashboard() {
         <div className="px-4 pb-8 space-y-3">
           {/* Countdown */}
           <Countdown targetDate={bonfireDate} />
+
+          {/* RSVP CTA */}
+          {!myGuest && !alreadyRsvpd && (
+            <Card className="text-center py-5 glass-warm">
+              <p className="text-sm text-smoke-300 mb-2">Haven't RSVP'd yet?</p>
+              <a
+                href="/rsvp"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-fire-500 hover:bg-fire-400 text-white text-sm font-medium rounded-xl transition-colors tap-highlight-none glow-fire-sm"
+              >
+                Submit your RSVP 🔥
+              </a>
+            </Card>
+          )}
 
           {/* Personal RSVP status */}
           {myGuest && (
@@ -168,19 +186,6 @@ export default function GuestDashboard() {
           {/* Contribution */}
           {event?.contribution_link && (
             <ContributionCard link={event.contribution_link} matchRatio={event.contribution_match_ratio} />
-          )}
-
-          {/* RSVP CTA */}
-          {!myGuest && (
-            <Card className="text-center py-5 glass-warm">
-              <p className="text-sm text-smoke-300 mb-2">Haven't RSVP'd yet?</p>
-              <a
-                href="/rsvp"
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-fire-500 hover:bg-fire-400 text-white text-sm font-medium rounded-xl transition-colors tap-highlight-none glow-fire-sm"
-              >
-                Submit your RSVP 🔥
-              </a>
-            </Card>
           )}
 
           {/* Admin link */}

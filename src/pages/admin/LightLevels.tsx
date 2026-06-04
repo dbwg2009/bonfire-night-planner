@@ -16,7 +16,6 @@ import type { ScheduleItem, Event, Location } from '../../lib/types'
 
 const DEFAULT_LAT = 51.822
 const DEFAULT_LON = -3.016
-const FIREWORKS_MAX_LIGHT = 6  // light % at/below which "ideal for fireworks" shows
 
 const PRESET_EVENTS = [
   { title: 'Leaving meeting location', activity_type: 'Transportation' },
@@ -68,9 +67,6 @@ function lightPctFromAlt(altDeg: number): number {
   return 0
 }
 
-function isFireworksIdeal(altDeg: number): boolean {
-  return lightPctFromAlt(altDeg) <= FIREWORKS_MAX_LIGHT
-}
 
 function sunEmberColor(altDeg: number): string {
   // Fireball at altitude → cooling ember below the horizon
@@ -99,21 +95,34 @@ function phaseEmoji(altDeg: number): string {
   return '🌑'
 }
 
-// Warm ember background — reads as warm-dark, never flat black
+// Sky panel: bright amber in daylight, cooling through twilight to dark ember at night
 function skyPanelStyle(altDeg: number): React.CSSProperties {
   const pct = lightPctFromAlt(altDeg)
-  if (pct >= 50) return { background: 'linear-gradient(180deg, #5a3410 0%, #2a1808 100%)' }
-  if (pct >= 20) return { background: 'linear-gradient(180deg, #4a260e 0%, #24130a 100%)' }
-  if (pct >= 5)  return { background: 'linear-gradient(180deg, #3a1c12 0%, #1d100c 100%)' }
-  return { background: 'linear-gradient(180deg, #2c1a16 0%, #150d0c 100%)' }
+  if (pct >= 80) return { background: 'linear-gradient(180deg, #c97c18 0%, #7a3e08 100%)' }
+  if (pct >= 50) return { background: 'linear-gradient(180deg, #8a4a10 0%, #4e2208 100%)' }
+  if (pct >= 20) return { background: 'linear-gradient(180deg, #5a2a0e 0%, #2e1208 100%)' }
+  if (pct >= 5)  return { background: 'linear-gradient(180deg, #3e1c10 0%, #200e0a 100%)' }
+  return { background: 'linear-gradient(180deg, #2c1610 0%, #160c0a 100%)' }
 }
 
-function phaseBadge(altDeg: number): { label: string; cls: string } | null {
-  const pct = lightPctFromAlt(altDeg)
-  if (pct <= FIREWORKS_MAX_LIGHT) return { label: '🎆 fireworks', cls: 'bg-purple-500/15 text-purple-200 border-purple-400/20' }
-  if (pct <= 20) return { label: '🔥 bonfire window', cls: 'bg-orange-500/15 text-orange-200 border-orange-400/20' }
-  if (pct <= 40) return { label: '🌆 deep twilight', cls: 'bg-red-500/15 text-red-200 border-red-400/20' }
-  if (pct <= 70) return { label: '🌇 golden hour', cls: 'bg-amber-500/15 text-amber-200 border-amber-400/20' }
+// Returns a badge based on which smart-timing zone the given minute falls in
+function timingZoneBadge(
+  mins: number,
+  timing: SmartTiming
+): { label: string; cls: string } | null {
+  const departMins  = dateToMinutes(timing.departBy)
+  const bonStartMins = dateToMinutes(timing.bonfireStart)
+  const bonEndMins   = dateToMinutes(timing.bonfireEnd)
+  const fwMins       = dateToMinutes(timing.fireworksAfter)
+
+  if (fwMins != null && mins >= fwMins)
+    return { label: '🎆 light fireworks', cls: 'bg-purple-500/25 text-purple-100 border-purple-400/30' }
+  if (bonStartMins != null && bonEndMins != null && mins >= bonStartMins && mins < bonEndMins)
+    return { label: '🔥 light bonfire', cls: 'bg-orange-500/25 text-orange-100 border-orange-400/30' }
+  if (departMins != null && bonStartMins != null && mins >= departMins && mins < bonStartMins)
+    return { label: '⏳ setup window', cls: 'bg-yellow-500/20 text-yellow-100 border-yellow-400/25' }
+  if (departMins != null && mins < departMins && mins >= departMins - 60)
+    return { label: `🚶 leave by ${fmtDate(timing.departBy)}`, cls: 'bg-fire-500/20 text-fire-100 border-fire-400/25' }
   return null
 }
 
@@ -305,7 +314,7 @@ export default function LightLevels() {
 
   const displayAlt = getSunAltDeg(displayMinutes, displayDate, lat, lon)
   const displayLight = lightPctFromAlt(displayAlt)
-  const idealNow = isFireworksIdeal(displayAlt)
+
 
   const sunX = (displayMinutes / 1440) * arc.W
   const sunY = arc.altToY(displayAlt)
@@ -476,11 +485,9 @@ export default function LightLevels() {
                 <span className="text-xs text-smoke-600">·</span>
                 <span className="text-xs text-smoke-500">{Math.abs(displayAlt).toFixed(1)}° {displayAlt >= 0 ? 'above' : 'below'}</span>
                 {(() => {
-                  const b = phaseBadge(displayAlt)
+                  const b = timingZoneBadge(displayMinutes, smartTiming)
                   return b && (
-                    <span className={cn('text-[10px] border px-2 py-0.5 rounded-full', b.cls)}>
-                      {idealNow ? '🎆 ideal for fireworks' : b.label}
-                    </span>
+                    <span className={cn('text-[10px] border px-2 py-0.5 rounded-full', b.cls)}>{b.label}</span>
                   )
                 })()}
               </div>
@@ -589,7 +596,7 @@ export default function LightLevels() {
                   const mins = item.start_time ? timeToMinutes(item.start_time) : null
                   const alt  = mins != null ? getSunAltDeg(mins, eventDate, lat, lon) : null
                   const lp   = alt != null ? lightPctFromAlt(alt) : null
-                  const badge = alt != null ? phaseBadge(alt) : null
+                  const badge = mins != null ? timingZoneBadge(mins, smartTiming) : null
 
                   return (
                     <div key={item.id}

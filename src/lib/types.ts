@@ -90,6 +90,7 @@ export interface ScheduleItem {
   owner?: string
   notes?: string
   sort_order: number
+  light_level_target?: number  // 0–100 manually assigned brightness %
   event_id: string
 }
 

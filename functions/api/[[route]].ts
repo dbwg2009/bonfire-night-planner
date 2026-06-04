@@ -689,14 +689,18 @@ app.post('/api/events/:eventId/organisers', requireAuth(async (c, org) => {
 
 app.put('/api/events/:eventId/organisers/:id', requireAuth(async (c, org) => {
   if (!org.is_owner && !org.permissions.tasks_and_settings) return c.json({ error: 'Forbidden' }, 403)
+  // Non-owners cannot edit their own record (prevents self-escalation)
+  if (!org.is_owner && org.id === c.req.param('id')) return c.json({ error: 'Forbidden' }, 403)
   const body = await c.req.json()
+  // Only owners can grant or revoke owner status
+  const isOwner = org.is_owner ? (body.is_owner ? 1 : 0) : 0
   if (body.pin) {
     const hash = await hashPin(body.pin)
     await c.env.DB.prepare('UPDATE organisers SET name=?, pin_hash=?, color=?, is_owner=?, permissions=? WHERE id=? AND event_id=?')
-      .bind(body.name, hash, body.color, body.is_owner ? 1 : 0, JSON.stringify(body.permissions ?? {}), c.req.param('id'), c.req.param('eventId')).run()
+      .bind(body.name, hash, body.color, isOwner, JSON.stringify(body.permissions ?? {}), c.req.param('id'), c.req.param('eventId')).run()
   } else {
     await c.env.DB.prepare('UPDATE organisers SET name=?, color=?, is_owner=?, permissions=? WHERE id=? AND event_id=?')
-      .bind(body.name, body.color, body.is_owner ? 1 : 0, JSON.stringify(body.permissions ?? {}), c.req.param('id'), c.req.param('eventId')).run()
+      .bind(body.name, body.color, isOwner, JSON.stringify(body.permissions ?? {}), c.req.param('id'), c.req.param('eventId')).run()
   }
   const o = await c.env.DB.prepare('SELECT id, name, color, is_owner, permissions, event_id, created_at FROM organisers WHERE id = ?').bind(c.req.param('id')).first()
   return c.json(mapOrganiser(o as Record<string, unknown>))

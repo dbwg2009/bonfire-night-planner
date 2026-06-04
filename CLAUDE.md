@@ -10,7 +10,7 @@
 
 ### The questioning standard
 
-- **Aim for at least 3 questions per user prompt**, even for seemingly simple requests.
+- **Aim for at least 3 questions or more per user prompt**, even for seemingly simple requests.
 - It is always better to ask too many questions than to build the wrong thing.
 - Questions should cover: intent ("what problem are you solving?"), scope ("what should this NOT do?"), and design ("how should it look/behave?").
 - If a request touches multiple concerns (UI + DB + API), ask about each layer separately.

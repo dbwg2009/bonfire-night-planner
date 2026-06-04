@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { format, formatDistanceToNow, differenceInDays, differenceInHours } from 'date-fns'
+import type { Guest } from './types'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -65,7 +66,7 @@ export function formatWhatsApp(text: string): string {
     .replace(/__(.*?)__/g, '_$1_')
 }
 
-export type RsvpStatus = 'in_consideration' | 'invited' | 'accepted' | 'declined'
+export type RsvpStatus = Guest['rsvp_status']
 export type DietaryOption = 'burger' | 'sausage'
 export type TaskStatus = 'pending' | 'in_progress' | 'completed'
 export type TaskStage = 'pre_event' | 'day_of' | 'post_event'

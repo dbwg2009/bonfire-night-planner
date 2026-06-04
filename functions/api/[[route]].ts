@@ -569,14 +569,16 @@ app.delete('/api/events/:eventId/conflict-schedule/:id', requireAuth(async (c) =
 
 // ─── Pickup Slots ──────────────────────────────────────────────────────────────
 
-app.get('/api/events/:eventId/pickup-slots', requireAuth(async (c) => {
+app.get('/api/events/:eventId/pickup-slots', requireAuth(async (c, org) => {
+  if (org.event_id !== c.req.param('eventId')) return c.json({ error: 'Forbidden' }, 403)
   const slots = await c.env.DB.prepare(
     'SELECT * FROM pickup_slots WHERE event_id = ? ORDER BY sort_order, label'
   ).bind(c.req.param('eventId')).all()
   return c.json(slots.results)
 }))
 
-app.post('/api/events/:eventId/pickup-slots', requireAuth(async (c) => {
+app.post('/api/events/:eventId/pickup-slots', requireAuth(async (c, org) => {
+  if (org.event_id !== c.req.param('eventId')) return c.json({ error: 'Forbidden' }, 403)
   const body = await c.req.json()
   const id = crypto.randomUUID()
   await c.env.DB.prepare(
@@ -586,7 +588,8 @@ app.post('/api/events/:eventId/pickup-slots', requireAuth(async (c) => {
   return c.json(slot)
 }))
 
-app.put('/api/events/:eventId/pickup-slots/:id', requireAuth(async (c) => {
+app.put('/api/events/:eventId/pickup-slots/:id', requireAuth(async (c, org) => {
+  if (org.event_id !== c.req.param('eventId')) return c.json({ error: 'Forbidden' }, 403)
   const body = await c.req.json()
   await c.env.DB.prepare(
     'UPDATE pickup_slots SET label=?, sort_order=? WHERE id=? AND event_id=?'
@@ -595,7 +598,8 @@ app.put('/api/events/:eventId/pickup-slots/:id', requireAuth(async (c) => {
   return c.json(slot)
 }))
 
-app.delete('/api/events/:eventId/pickup-slots/:id', requireAuth(async (c) => {
+app.delete('/api/events/:eventId/pickup-slots/:id', requireAuth(async (c, org) => {
+  if (org.event_id !== c.req.param('eventId')) return c.json({ error: 'Forbidden' }, 403)
   await c.env.DB.prepare(
     'DELETE FROM pickup_slots WHERE id = ? AND event_id = ?'
   ).bind(c.req.param('id'), c.req.param('eventId')).run()

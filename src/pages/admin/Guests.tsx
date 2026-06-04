@@ -170,7 +170,7 @@ export default function Guests() {
                   : 'glass border-white/10 text-smoke-400'
               }`}
             >
-              {f === 'all' ? 'All' : f === 'in_consideration' ? 'Considering' : f === 'invited' ? 'Invited' : f === 'accepted' ? 'Accepted' : 'Declined'} ({counts[f]})
+              {f === 'all' ? 'All' : RSVP_LABELS[f]} ({counts[f]})
             </button>
           ))}
         </div>

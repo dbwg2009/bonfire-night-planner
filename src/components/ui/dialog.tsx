@@ -29,12 +29,14 @@ export function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 glass-card p-5 shadow-2xl data-[state=open]:animate-slide-up',
+          'fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 glass-card shadow-2xl data-[state=open]:animate-slide-up flex flex-col max-h-[calc(100dvh-2rem)]',
           className
         )}
         {...props}
       >
-        {children}
+        <div className="overflow-y-auto flex-1 min-h-0 p-5">
+          {children}
+        </div>
         <DialogPrimitive.Close className="absolute right-3 top-3 rounded-lg p-1.5 text-smoke-400 hover:text-smoke-200 hover:bg-white/5 transition-colors">
           <X size={16} />
           <span className="sr-only">Close</span>

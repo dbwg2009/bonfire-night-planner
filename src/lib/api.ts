@@ -1,7 +1,27 @@
+import { useAuthStore } from '../store/auth'
+import type { Milestone, MilestonesResponse } from './types'
+
 const BASE = '/api'
 
 function getToken(): string | null {
-  return localStorage.getItem('bonfire_token')
+  // The in-memory auth store is the source of truth — it's set on login and
+  // rehydrated from persisted state on reload, so it can't fall out of sync the
+  // way a separate localStorage key can. Fall back to localStorage, guarded
+  // against environments where storage access throws (blocked site storage).
+  const storeToken = useAuthStore.getState().token
+  if (storeToken) return storeToken
+  try {
+    return localStorage.getItem('bonfire_token')
+  } catch {
+    return null
+  }
+}
+
+function handleUnauthorised() {
+  localStorage.removeItem('bonfire_token')
+  localStorage.removeItem('bonfire-auth')
+  localStorage.removeItem('bonfire-event')
+  window.location.href = '/login'
 }
 
 function handleUnauthorised() {
@@ -43,7 +63,7 @@ export const api = {
     }, true),
 
   // Events
-  getEvents: () => request<unknown[]>('/events'),
+  getEvents: (skipAuthRedirect = false) => request<unknown[]>('/events', {}, skipAuthRedirect),
   getEvent: (id: string) => request<unknown>(`/events/${id}`),
   createEvent: (data: unknown) =>
     request<unknown>('/events', { method: 'POST', body: JSON.stringify(data) }),
@@ -119,6 +139,15 @@ export const api = {
     request<unknown>(`/events/${eventId}/conflict-schedule/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteConflictItem: (eventId: string, id: string) =>
     request<unknown>(`/events/${eventId}/conflict-schedule/${id}`, { method: 'DELETE' }),
+
+  // Milestones (admin)
+  getMilestones: (eventId: string) => request<MilestonesResponse>(`/events/${eventId}/milestones`),
+  createMilestone: (eventId: string, data: unknown) =>
+    request<Milestone>(`/events/${eventId}/milestones`, { method: 'POST', body: JSON.stringify(data) }),
+  updateMilestone: (eventId: string, id: string, data: unknown) =>
+    request<Milestone>(`/events/${eventId}/milestones/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteMilestone: (eventId: string, id: string) =>
+    request<{ success: boolean }>(`/events/${eventId}/milestones/${id}`, { method: 'DELETE' }),
 
   // Organisers
   getOrganisers: (eventId: string) => request<unknown[]>(`/events/${eventId}/organisers`),

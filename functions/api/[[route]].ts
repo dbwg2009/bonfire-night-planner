@@ -13,8 +13,16 @@ const app = new Hono<{ Bindings: Env }>()
 
 app.use('*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'] }))
 
-// JWT secret fallback
-const getSecret = (env: Env) => env.JWT_SECRET ?? 'bonfire-night-dev-secret-change-in-production'
+// JWT secret + algorithm.
+//
+// hono's verify() REQUIRES the algorithm to be passed explicitly. Calling
+// verify(token, secret) throws `JwtAlgorithmRequired` before it ever checks the
+// signature, so every authenticated request failed with a 401 regardless of the
+// secret — which is what bounced users back to login. sign() defaults to HS256,
+// so verify() must be told HS256 too.
+const DEFAULT_JWT_SECRET = 'change-this-to-a-secure-random-string-in-production'
+const JWT_ALG = 'HS256' as const
+const getSecret = (env: Env) => env.JWT_SECRET ?? DEFAULT_JWT_SECRET
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────────
 
@@ -25,21 +33,24 @@ async function hashPin(pin: string): Promise<string> {
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-async function getOrganiserFromToken(c: any): Promise<{ id: string; event_id: string; is_owner: boolean; permissions: Record<string, boolean> } | null> {
+async function getOrganiserFromToken(c: any): Promise<{ organiser: Record<string, unknown> | null; reason: string }> {
   const auth = c.req.header('Authorization')
-  if (!auth?.startsWith('Bearer ')) return null
+  if (!auth) return { organiser: null, reason: 'no_auth_header' }
+  if (!auth.startsWith('Bearer ')) return { organiser: null, reason: 'no_bearer_prefix' }
+  const token = auth.slice(7)
+  if (!token) return { organiser: null, reason: 'empty_token' }
   try {
-    const payload = await verify(auth.slice(7), getSecret(c.env)) as Record<string, unknown>
-    return payload as any
+    const payload = await verify(token, getSecret(c.env), JWT_ALG) as Record<string, unknown>
+    return { organiser: payload, reason: 'ok' }
   } catch {
-    return null
+    return { organiser: null, reason: 'verify_failed' }
   }
 }
 
 function requireAuth(handler: (c: any, organiser: any) => Promise<Response>) {
   return async (c: any) => {
-    const organiser = await getOrganiserFromToken(c)
-    if (!organiser) return c.json({ error: 'Unauthorised' }, 401)
+    const { organiser, reason } = await getOrganiserFromToken(c)
+    if (!organiser) return c.json({ error: 'Unauthorised', reason }, 401)
     return handler(c, organiser)
   }
 }
@@ -51,7 +62,20 @@ function parseJson<T>(val: string | null, fallback: T): T {
 }
 
 function mapEvent(row: Record<string, unknown>) {
-  return { ...row, conflict_event_enabled: row.conflict_event_enabled === 1 }
+  return {
+    ...row,
+    conflict_event_enabled: row.conflict_event_enabled === 1,
+    contribution_match_ratio: row.contribution_match_ratio ?? 0
+  }
+}
+
+interface MilestoneRow {
+  id: string; event_id: string; name: string; description: string
+  amount: number; emoji: string; icon_preset: string; icon_image: string
+  important: number; created_at: string; updated_at: string
+}
+function mapMilestone(m: MilestoneRow) {
+  return { ...m, important: m.important === 1 }
 }
 
 function mapOrganiser(row: Record<string, unknown>) {
@@ -81,7 +105,7 @@ function mapLocation(row: Record<string, unknown>) {
 // Returns safe public event info for the guest-facing view
 app.get('/api/public/event', async (c) => {
   const event = await c.env.DB.prepare(
-    "SELECT id, year, name, date, meeting_location, event_location, conflict_event_enabled, conflict_event_name FROM events WHERE status != 'archived' ORDER BY year DESC LIMIT 1"
+    "SELECT id, year, name, date, meeting_location, event_location, conflict_event_enabled, conflict_event_name, contribution_link, contribution_match_ratio FROM events WHERE status != 'archived' ORDER BY year DESC LIMIT 1"
   ).first()
   if (!event) return c.json({ error: 'No active event' }, 404)
   return c.json(mapEvent(event as Record<string, unknown>))
@@ -94,6 +118,114 @@ app.get('/api/public/guest/:id', async (c) => {
   ).bind(c.req.param('id')).first()
   if (!guest) return c.json({ error: 'Guest not found' }, 404)
   return c.json({ ...guest, dietary: parseJson(guest.dietary as string, []) })
+})
+
+// ─── Status / health (public) ──────────────────────────────────────────────────
+
+const STATUS_COMPONENTS: { key: string; label: string }[] = [
+  { key: 'frontend', label: 'Frontend' },
+  { key: 'api', label: 'API / Functions' },
+  { key: 'database', label: 'Database (D1)' },
+  { key: 'auth', label: 'Auth service' },
+  { key: 'open_meteo', label: 'Open-Meteo' },
+  { key: 'met_office', label: 'Met Office DataHub' }
+]
+
+// Runs live health checks, records them to D1 for a rough recent-history view,
+// and returns current status + uptime. Public — no auth.
+app.get('/api/status', async (c) => {
+  const origin = new URL(c.req.url).origin
+
+  const check = async (key: string, fn: () => Promise<void>) => {
+    const start = Date.now()
+    try {
+      await fn()
+      return { key, ok: true, latency_ms: Date.now() - start, error: null as string | null }
+    } catch (e) {
+      return { key, ok: false, latency_ms: Date.now() - start, error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  // api is up by definition (we're responding); the client measures round-trip.
+  const results = [{ key: 'api', ok: true, latency_ms: 0, error: null as string | null }]
+
+  results.push(await check('database', async () => {
+    const r = await c.env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>()
+    if (!r || r.ok !== 1) throw new Error('unexpected query result')
+  }))
+
+  results.push(await check('auth', async () => {
+    // Exercise the full JWT sign+verify pipeline (the class of bug that broke
+    // login) and confirm the organisers table is reachable.
+    const token = await sign({ t: 1, exp: Math.floor(Date.now() / 1000) + 60 }, getSecret(c.env), JWT_ALG)
+    await verify(token, getSecret(c.env), JWT_ALG)
+    await c.env.DB.prepare('SELECT COUNT(*) AS n FROM organisers').first()
+  }))
+
+  results.push(await check('open_meteo', async () => {
+    const res = await fetch(
+      'https://api.open-meteo.com/v1/forecast?latitude=51.82&longitude=-3.02&daily=temperature_2m_max&forecast_days=1',
+      { signal: AbortSignal.timeout(6000) }
+    )
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+  }))
+
+  results.push(await check('met_office', async () => {
+    const key = c.env.MET_OFFICE_API_KEY
+    if (!key) throw new Error('API key not configured')
+    const res = await fetch(
+      'https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/daily?latitude=51.82&longitude=-3.02&includeLocationName=false',
+      { headers: { apikey: key, Accept: 'application/json' }, signal: AbortSignal.timeout(8000) }
+    )
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+  }))
+
+  results.push(await check('frontend', async () => {
+    const res = await fetch(origin + '/', { headers: { 'cache-control': 'no-cache' }, signal: AbortSignal.timeout(6000) })
+    if (!res.ok) throw new Error('index HTTP ' + res.status)
+    if (!(await res.text()).includes('id="root"')) throw new Error('index missing app root')
+  }))
+
+  const now = new Date().toISOString()
+
+  // Persist results + read recent history (best effort — never blocks live status).
+  const history: Record<string, number[]> = {}
+  try {
+    await c.env.DB.prepare(
+      'CREATE TABLE IF NOT EXISTS status_checks (id TEXT PRIMARY KEY, checked_at TEXT NOT NULL, component TEXT NOT NULL, ok INTEGER NOT NULL, latency_ms INTEGER)'
+    ).run()
+    await c.env.DB.prepare(
+      'CREATE INDEX IF NOT EXISTS idx_status_component_time ON status_checks(component, checked_at)'
+    ).run()
+    await c.env.DB.batch(results.map(r =>
+      c.env.DB.prepare('INSERT INTO status_checks (id, checked_at, component, ok, latency_ms) VALUES (?, ?, ?, ?, ?)')
+        .bind(crypto.randomUUID(), now, r.key, r.ok ? 1 : 0, r.latency_ms)
+    ))
+    await c.env.DB.prepare("DELETE FROM status_checks WHERE checked_at < datetime('now', '-7 days')").run()
+    const rows = (await c.env.DB.prepare(
+      "SELECT component, ok FROM status_checks WHERE checked_at > datetime('now', '-1 day') ORDER BY checked_at ASC"
+    ).all()).results as { component: string; ok: number }[]
+    for (const row of rows) (history[row.component] ??= []).push(row.ok)
+  } catch { /* history unavailable — still return live status */ }
+
+  const components = STATUS_COMPONENTS.map(({ key, label }) => {
+    const r = results.find(x => x.key === key)!
+    const h = history[key] ?? []
+    const okCount = h.filter(v => v === 1).length
+    return {
+      key,
+      label,
+      ok: r.ok,
+      latency_ms: r.latency_ms,
+      error: r.error,
+      uptime_24h: h.length ? Math.round((okCount / h.length) * 1000) / 10 : null,
+      history: h.slice(-40).map(v => v === 1)
+    }
+  })
+
+  const allOk = components.every(x => x.ok)
+  const anyOk = components.some(x => x.ok)
+  return c.json({ checked_at: now, overall: allOk ? 'operational' : anyOk ? 'partial' : 'major', components })
 })
 
 // ─── Auth ──────────────────────────────────────────────────────────────────────
@@ -115,7 +247,7 @@ app.post('/api/auth/login', async (c) => {
     exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30 // 30 days
   }
 
-  const token = await sign(payload, getSecret(c.env))
+  const token = await sign(payload, getSecret(c.env), JWT_ALG)
   return c.json({ token, organiser: mapOrganiser(org as Record<string, unknown>) })
 })
 
@@ -132,8 +264,7 @@ app.get('/api/events/:id', requireAuth(async (c) => {
   return c.json(mapEvent(event as Record<string, unknown>))
 }))
 
-app.post('/api/events', requireAuth(async (c, org) => {
-  if (!org.is_owner) return c.json({ error: 'Forbidden' }, 403)
+app.post('/api/events', requireAuth(async (c) => {
   const body = await c.req.json()
   await c.env.DB.prepare(
     'INSERT INTO events (id, year, name, date, status, meeting_location, event_location, conflict_event_enabled, conflict_event_name, food_split_ratio, food_buffer_factor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
@@ -143,10 +274,12 @@ app.post('/api/events', requireAuth(async (c, org) => {
 }))
 
 app.put('/api/events/:id', requireAuth(async (c, org) => {
+  if (org.event_id !== c.req.param('id')) return c.json({ error: 'Forbidden' }, 403)
+  if (!org.is_owner && !org.permissions?.tasks_and_settings) return c.json({ error: 'Forbidden' }, 403)
   const body = await c.req.json()
   await c.env.DB.prepare(
-    'UPDATE events SET name=?, date=?, meeting_location=?, event_location=?, conflict_event_enabled=?, conflict_event_name=?, food_split_ratio=?, food_buffer_factor=?, updated_at=datetime("now") WHERE id=?'
-  ).bind(body.name, body.date, body.meeting_location ?? '', body.event_location ?? '', body.conflict_event_enabled ? 1 : 0, body.conflict_event_name ?? '', body.food_split_ratio ?? 0.6, body.food_buffer_factor ?? 1.1, c.req.param('id')).run()
+    'UPDATE events SET name=?, date=?, meeting_location=?, event_location=?, conflict_event_enabled=?, conflict_event_name=?, food_split_ratio=?, food_buffer_factor=?, contribution_link=?, contribution_match_ratio=?, updated_at=datetime("now") WHERE id=?'
+  ).bind(body.name, body.date, body.meeting_location ?? '', body.event_location ?? '', body.conflict_event_enabled ? 1 : 0, body.conflict_event_name ?? '', body.food_split_ratio ?? 0.6, body.food_buffer_factor ?? 1.1, body.contribution_link ?? null, body.contribution_match_ratio ?? 0, c.req.param('id')).run()
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(c.req.param('id')).first()
   return c.json(mapEvent(event as Record<string, unknown>))
 }))
@@ -296,6 +429,63 @@ app.put('/api/events/:eventId/finance/:id', requireAuth(async (c) => {
 
 app.delete('/api/events/:eventId/finance/:id', requireAuth(async (c) => {
   await c.env.DB.prepare('DELETE FROM transactions WHERE id = ? AND event_id = ?').bind(c.req.param('id'), c.req.param('eventId')).run()
+  return c.json({ success: true })
+}))
+
+// ─── Milestones ────────────────────────────────────────────────────────────────
+
+// Public endpoint — returns milestones + total contributions raised for the event
+app.get('/api/public/milestones/:eventId', async (c) => {
+  const eventId = c.req.param('eventId')
+  const [milestonesRes, totalRes] = await Promise.all([
+    c.env.DB.prepare("SELECT * FROM milestones WHERE event_id = ? ORDER BY amount ASC").bind(eventId).all(),
+    c.env.DB.prepare("SELECT COALESCE(SUM(actual_amount), 0) AS total FROM transactions WHERE event_id = ? AND transaction_type = 'contribution'").bind(eventId).first<{ total: number }>()
+  ])
+  return c.json({
+    milestones: milestonesRes.results.map(m => mapMilestone(m as MilestoneRow)),
+    total_raised: Math.round((totalRes?.total ?? 0) * 100) // convert £ to pence
+  })
+})
+
+app.get('/api/events/:eventId/milestones', requireAuth(async (c) => {
+  const [milestonesRes, totalRes] = await Promise.all([
+    c.env.DB.prepare("SELECT * FROM milestones WHERE event_id = ? ORDER BY amount ASC").bind(c.req.param('eventId')).all(),
+    c.env.DB.prepare("SELECT COALESCE(SUM(actual_amount), 0) AS total FROM transactions WHERE event_id = ? AND transaction_type = 'contribution'").bind(c.req.param('eventId')).first<{ total: number }>()
+  ])
+  return c.json({
+    milestones: milestonesRes.results.map(m => mapMilestone(m as MilestoneRow)),
+    total_raised: Math.round((totalRes?.total ?? 0) * 100)
+  })
+}))
+
+app.post('/api/events/:eventId/milestones', requireAuth(async (c, org) => {
+  if (org.event_id !== c.req.param('eventId')) return c.json({ error: 'Forbidden' }, 403)
+  if (!org.is_owner && !org.permissions?.tasks_and_settings) return c.json({ error: 'Forbidden' }, 403)
+  const body = await c.req.json()
+  if (!body.amount || body.amount <= 0) return c.json({ error: 'amount must be a positive integer' }, 400)
+  await c.env.DB.prepare(
+    'INSERT INTO milestones (id, event_id, name, description, amount, emoji, icon_preset, icon_image, important) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(body.id, c.req.param('eventId'), body.name, body.description ?? '', body.amount, body.emoji ?? '', body.icon_preset ?? '', body.icon_image ?? '', body.important ? 1 : 0).run()
+  const m = await c.env.DB.prepare('SELECT * FROM milestones WHERE id = ?').bind(body.id).first()
+  return c.json(mapMilestone(m as MilestoneRow))
+}))
+
+app.put('/api/events/:eventId/milestones/:id', requireAuth(async (c, org) => {
+  if (org.event_id !== c.req.param('eventId')) return c.json({ error: 'Forbidden' }, 403)
+  if (!org.is_owner && !org.permissions?.tasks_and_settings) return c.json({ error: 'Forbidden' }, 403)
+  const body = await c.req.json()
+  if (!body.amount || body.amount <= 0) return c.json({ error: 'amount must be a positive integer' }, 400)
+  await c.env.DB.prepare(
+    'UPDATE milestones SET name=?, description=?, amount=?, emoji=?, icon_preset=?, icon_image=?, important=?, updated_at=datetime("now") WHERE id=? AND event_id=?'
+  ).bind(body.name, body.description ?? '', body.amount, body.emoji ?? '', body.icon_preset ?? '', body.icon_image ?? '', body.important ? 1 : 0, c.req.param('id'), c.req.param('eventId')).run()
+  const m = await c.env.DB.prepare('SELECT * FROM milestones WHERE id = ?').bind(c.req.param('id')).first()
+  return c.json(mapMilestone(m as MilestoneRow))
+}))
+
+app.delete('/api/events/:eventId/milestones/:id', requireAuth(async (c, org) => {
+  if (org.event_id !== c.req.param('eventId')) return c.json({ error: 'Forbidden' }, 403)
+  if (!org.is_owner && !org.permissions?.tasks_and_settings) return c.json({ error: 'Forbidden' }, 403)
+  await c.env.DB.prepare('DELETE FROM milestones WHERE id = ? AND event_id = ?').bind(c.req.param('id'), c.req.param('eventId')).run()
   return c.json({ success: true })
 }))
 

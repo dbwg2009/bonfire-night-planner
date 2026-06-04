@@ -18,6 +18,8 @@ export interface Event {
   light_notes?: string        // Any extra light/timing notes for the organiser
   lat?: number                // Event location lat for weather + light calculations
   lon?: number                // Event location lon
+  contribution_link?: string  // Payment URL (monzo.me, etc.) shown to guests
+  contribution_match_ratio: number // 0 = no match, 0.5 = match 50%, etc.
   created_at: string
   updated_at: string
 }
@@ -190,6 +192,25 @@ export interface SunData {
 export interface AuthState {
   organiser: Organiser | null
   token: string | null
+}
+
+export interface Milestone {
+  id: string
+  event_id: string
+  name: string
+  description: string
+  amount: number        // cumulative target in pence
+  emoji: string
+  icon_preset: string
+  icon_image: string    // base64
+  important: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface MilestonesResponse {
+  milestones: Milestone[]
+  total_raised: number  // in pence
 }
 
 export interface ApiResponse<T> {

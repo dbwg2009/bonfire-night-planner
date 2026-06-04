@@ -1,13 +1,34 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { CheckCircle2 } from 'lucide-react'
 import { Card } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { FireBackground } from '../../components/FireBackground'
+import { MilestoneBar } from '../../components/MilestoneBar'
 import { Toaster } from '../../components/ui/toast'
 import { toast } from '../../components/ui/toast'
 import { useEventStore } from '../../store/event'
 import { api } from '../../lib/api'
+import type { MilestonesResponse } from '../../lib/types'
+
+const CONTRIBUTION_COPY = [
+  (name: string) => ({
+    heading: "You're on the list! 🎉",
+    body: `Thanks ${name}! Bonfire Night is put on for everyone and funded by contributions from guests — there's no set amount and nothing is expected. But if you'd like to chip in towards the fire, food, and fireworks, it's always massively appreciated.`
+  }),
+  (name: string) => ({
+    heading: "You're coming — brilliant! 🔥",
+    body: `Thanks ${name}! Every year Bonfire Night is self-funded by the people who come. No pressure at all, but if you'd like to help cover the costs (fire, food, the works), anything you contribute goes straight towards making the night happen.`
+  }),
+  (name: string) => ({
+    heading: "See you on the night! 🪵",
+    body: `Thanks ${name}! Bonfire Night runs on contributions from guests — it's what keeps the fire burning year after year. Any amount helps and nothing is ever expected, but if you'd like to chip in it's hugely appreciated.`
+  }),
+  (name: string) => ({
+    heading: "You're in! 🎉",
+    body: `Thanks ${name}! This night is put on for everyone and funded by the people who come along. There's no set amount and absolutely no pressure — but if you'd like to help cover the fire, food, and fireworks, every contribution makes a real difference.`
+  }),
+]
 
 const COMMON_RESTRICTIONS = [
   { label: '🥜 Nut allergy', value: 'nut_allergy' },
@@ -19,9 +40,27 @@ const COMMON_RESTRICTIONS = [
 ]
 
 export default function RsvpForm() {
-  const event = useEventStore(s => s.currentEvent)
+  const storeEvent = useEventStore(s => s.currentEvent)
+  const [publicEvent, setPublicEvent] = useState<{ id: string; name?: string; contribution_link?: string; contribution_match_ratio: number } | null>(null)
   const [step, setStep] = useState<'form' | 'done'>('form')
   const [loading, setLoading] = useState(false)
+  const [copyVariant] = useState(() => Math.floor(Math.random() * CONTRIBUTION_COPY.length))
+  const [milestones, setMilestones] = useState<MilestonesResponse | null>(null)
+
+  useEffect(() => {
+    fetch('/api/public/event')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return
+        setPublicEvent(d)
+        return fetch(`/api/public/milestones/${d.id}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(m => m && setMilestones(m))
+      })
+      .catch(() => {})
+  }, [])
+
+  const event = publicEvent ?? storeEvent
   const [form, setForm] = useState({
     name: '',
     rsvp_status: 'accepted' as 'accepted' | 'declined',
@@ -63,26 +102,73 @@ export default function RsvpForm() {
   }
 
   if (step === 'done') {
+    const showContribution = form.rsvp_status === 'accepted' && !!event?.contribution_link
+    const copy = showContribution
+      ? CONTRIBUTION_COPY[copyVariant](form.name)
+      : null
+
     return (
       <div className="min-h-dvh min-h-screen flex flex-col items-center justify-center relative">
         <FireBackground />
         <Toaster />
-        <div className="relative z-10 text-center px-6 max-w-xs">
+        <div className="relative z-10 text-center px-6 max-w-sm w-full">
           <div className="w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-400/25 flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 size={28} className="text-emerald-400" />
           </div>
-          <h1 className="text-2xl font-bold text-smoke-100 mb-2">
-            {form.rsvp_status === 'accepted' ? "See you there! 🔥" : "No worries!"}
-          </h1>
-          <p className="text-smoke-400 text-sm mb-6">
-            {form.rsvp_status === 'accepted'
-              ? `Thanks ${form.name}! Your RSVP has been recorded. We'll be in touch with more details.`
-              : `Thanks for letting us know, ${form.name}. Hope to see you another time!`
-            }
-          </p>
-          <a href="/" className="text-fire-400 text-sm hover:text-fire-300 transition-colors">
-            ← Back to event info
-          </a>
+
+          {showContribution && copy ? (
+            <>
+              <h1 className="text-2xl font-bold text-smoke-100 mb-3">{copy.heading}</h1>
+              <p className="text-smoke-400 text-sm mb-6 leading-relaxed">{copy.body}</p>
+
+              {event.contribution_match_ratio > 0 && (
+                <p className="text-xs text-fire-400/80 mb-5 leading-relaxed">
+                  Contributions are match-funded at {Math.round(event.contribution_match_ratio * 100)}% — so if guests raise £100, we'll put in £{Math.round(100 * event.contribution_match_ratio)} too.
+                </p>
+              )}
+
+              <a
+                href={event.contribution_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full py-3 bg-fire-500 hover:bg-fire-400 text-white text-sm font-semibold rounded-2xl transition-colors tap-highlight-none glow-fire-sm mb-4"
+              >
+                Help cover the costs 💛
+              </a>
+
+              {/* Milestone bar on contribution screen */}
+              {milestones && milestones.milestones.length > 0 && (
+                <div className="mt-6 mb-4 text-left">
+                  <MilestoneBar
+                    milestones={milestones.milestones}
+                    totalRaisedPence={milestones.total_raised}
+                    compact
+                    showViewAll
+                    onViewAll={() => window.location.href = '/tracker'}
+                  />
+                </div>
+              )}
+
+              <a href="/" className="text-smoke-500 text-sm hover:text-smoke-300 transition-colors">
+                No thanks — back to event info
+              </a>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl font-bold text-smoke-100 mb-2">
+                {form.rsvp_status === 'accepted' ? "See you there! 🔥" : "No worries!"}
+              </h1>
+              <p className="text-smoke-400 text-sm mb-6">
+                {form.rsvp_status === 'accepted'
+                  ? `Thanks ${form.name}! Your RSVP has been recorded. We'll be in touch with more details.`
+                  : `Thanks for letting us know, ${form.name}. Hope to see you another time!`
+                }
+              </p>
+              <a href="/" className="text-fire-400 text-sm hover:text-fire-300 transition-colors">
+                ← Back to event info
+              </a>
+            </>
+          )}
         </div>
       </div>
     )

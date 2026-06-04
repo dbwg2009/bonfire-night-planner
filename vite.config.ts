@@ -10,13 +10,13 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png'],
       manifest: {
         name: 'Bonfire Night Planner',
         short_name: 'Bonfire Night',
         description: 'Plan your annual Bonfire Night event',
-        theme_color: '#0a0a0a',
-        background_color: '#0a0a0a',
+        theme_color: '#0a0500',
+        background_color: '#0a0500',
         display: 'standalone',
         orientation: 'portrait',
         icons: [

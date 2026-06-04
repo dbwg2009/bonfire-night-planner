@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, Shield } from 'lucide-react'
+import { MilestoneAdmin } from '../../components/MilestoneAdmin'
 import { Card } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
@@ -36,7 +37,9 @@ export default function Settings() {
     light_fireworks_after: event?.light_fireworks_after ?? '',
     light_notes: event?.light_notes ?? '',
     lat: event?.lat ?? '',
-    lon: event?.lon ?? ''
+    lon: event?.lon ?? '',
+    contribution_link: event?.contribution_link ?? '',
+    contribution_match_ratio: event?.contribution_match_ratio ?? 0
   })
 
   const [orgOpen, setOrgOpen] = useState(false)
@@ -194,6 +197,42 @@ export default function Settings() {
           )}
         </Card>
 
+        {/* Contributions */}
+        <Card>
+          <h2 className="text-sm font-semibold text-smoke-300 mb-1">Contributions</h2>
+          <p className="text-xs text-smoke-500 mb-3">Add a payment link and guests will see a contribution prompt on the event page and after RSVPing.</p>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-smoke-400 mb-1 block">Payment link</label>
+              <Input
+                value={eventForm.contribution_link}
+                onChange={e => setEventForm(f => ({ ...f, contribution_link: e.target.value }))}
+                placeholder="https://monzo.me/yourname"
+                type="url"
+                inputMode="url"
+              />
+              <p className="text-[11px] text-smoke-500 mt-1">Any payment URL — Monzo.me, PayPal.me, etc. Leave blank to hide the contribution prompt.</p>
+            </div>
+            <div>
+              <label className="text-xs text-smoke-400 mb-1 block">
+                Match funding ratio: <span className="text-fire-400">{Math.round(eventForm.contribution_match_ratio * 100)}%</span>
+                {eventForm.contribution_match_ratio === 0 && <span className="text-smoke-500"> (disabled)</span>}
+              </label>
+              <input
+                type="range" min="0" max="1" step="0.05"
+                value={eventForm.contribution_match_ratio}
+                onChange={e => setEventForm(f => ({ ...f, contribution_match_ratio: parseFloat(e.target.value) }))}
+                className="w-full accent-fire-500"
+              />
+              <p className="text-[11px] text-smoke-500">
+                {eventForm.contribution_match_ratio > 0
+                  ? `Guests will see: "Contributions are match-funded at ${Math.round(eventForm.contribution_match_ratio * 100)}% — so if guests raise £100, we'll put in £${Math.round(100 * eventForm.contribution_match_ratio)} too."`
+                  : 'Set above 0% to show a match funding note to guests.'}
+              </p>
+            </div>
+          </div>
+        </Card>
+
         <Button
           onClick={() => saveEvent.mutate(eventForm)}
           disabled={saveEvent.isPending}
@@ -201,6 +240,9 @@ export default function Settings() {
         >
           {saveEvent.isPending ? 'Saving…' : 'Save Event Settings'}
         </Button>
+
+        {/* Milestones */}
+        {event?.id && <MilestoneAdmin eventId={event.id} />}
 
         {/* Organisers */}
         <div className="flex items-center justify-between pt-2">

@@ -284,7 +284,7 @@ export default function Settings() {
                 {org.is_owner ? 'Owner — full access' : Object.entries(org.permissions).filter(([,v]) => v).map(([k]) => k.replace(/_/g, ' ')).join(', ') || 'No permissions'}
               </p>
             </div>
-            {canEditSettings && !org.is_owner && (
+            {canEditSettings && !org.is_owner && org.id !== organiser?.id && (
               <div className="flex gap-1 shrink-0">
                 <button onClick={() => { setEditingOrg(org); setOrgForm({ name: org.name, pin: '', color: org.color, is_owner: org.is_owner, permissions: org.permissions }); setOrgOpen(true) }} className="p-1.5 text-smoke-500 hover:text-smoke-200 tap-highlight-none"><Pencil size={13} /></button>
                 <button onClick={() => { if (confirm(`Remove ${org.name}?`)) removeOrg.mutate(org.id) }} className="p-1.5 text-smoke-500 hover:text-red-400 tap-highlight-none"><Trash2 size={13} /></button>

@@ -3,6 +3,7 @@ import {
   Users, UtensilsCrossed, ListTodo, CreditCard, MapPin,
   CheckSquare, Calendar, Settings, LogOut, ChevronRight, Car, Trophy, CheckCheck
 } from 'lucide-react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card } from '../../components/ui/card'
 import { Countdown } from '../../components/Countdown'
@@ -66,6 +67,7 @@ export default function Dashboard() {
   })
 
   const unreadCount = notifications.filter((n: { read: number }) => n.read === 0).length
+  const [showAllNotifs, setShowAllNotifs] = useState(false)
 
   const accepted = guests.filter(g => g.rsvp_status === 'accepted').length
   const declined = guests.filter(g => g.rsvp_status === 'declined').length
@@ -94,7 +96,7 @@ export default function Dashboard() {
   return (
     <div className="animate-fade-in">
       {/* Header */}
-      <div className="pl-4 pr-14 pt-6 pb-4 flex items-start justify-between">
+      <div className="px-4 pt-6 pb-4 flex items-start justify-between">
         <div>
           <p className="text-xs text-fire-400/70 uppercase tracking-widest font-medium">Welcome back</p>
           <h1 className="text-2xl font-bold text-smoke-100 mt-0.5">{organiser?.name}</h1>
@@ -153,7 +155,7 @@ export default function Dashboard() {
             <p className="text-sm text-smoke-500 text-center py-3">No notifications yet</p>
           ) : (
             <div className="space-y-0 -mx-4 -mb-4">
-              {notifications.slice(0, 5).map((n: { id: string; type: string; message: string; created_at: string; read: number }) => (
+              {(showAllNotifs ? notifications : notifications.slice(0, 2)).map((n: { id: string; type: string; message: string; created_at: string; read: number }) => (
                 <div
                   key={n.id}
                   className={`flex items-start gap-3 px-4 py-3 border-t border-white/[0.04] ${n.read === 0 ? 'bg-white/[0.03]' : ''}`}
@@ -166,6 +168,14 @@ export default function Dashboard() {
                   {n.read === 0 && <span className="w-1.5 h-1.5 rounded-full bg-fire-400 shrink-0 mt-1.5" />}
                 </div>
               ))}
+              {notifications.length > 2 && (
+                <button
+                  onClick={() => setShowAllNotifs(v => !v)}
+                  className="w-full px-4 py-2.5 border-t border-white/[0.04] text-xs text-fire-400 hover:text-fire-300 transition-colors text-center"
+                >
+                  {showAllNotifs ? 'Show less' : `View ${notifications.length - 2} more`}
+                </button>
+              )}
             </div>
           )}
         </Card>

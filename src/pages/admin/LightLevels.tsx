@@ -315,6 +315,18 @@ export default function LightLevels() {
   const displayAlt = getSunAltDeg(displayMinutes, displayDate, lat, lon)
   const displayLight = lightPctFromAlt(displayAlt)
 
+  // The panel background ranges from bright amber (day) to dark ember (night),
+  // so text + arc colours flip to stay readable against it.
+  const panelIsLight = displayLight >= 45
+  const panelText = {
+    strong: panelIsLight ? 'text-stone-900' : 'text-white',
+    body:   panelIsLight ? 'text-stone-800' : 'text-smoke-400',
+    muted:  panelIsLight ? 'text-stone-700/80' : 'text-smoke-500',
+    faint:  panelIsLight ? 'text-stone-600/70' : 'text-smoke-600',
+  }
+  const arcAboveStroke = panelIsLight ? 'rgba(80,30,0,0.45)' : 'rgba(255,150,60,0.35)'
+  const arcBelowStroke = panelIsLight ? 'rgba(60,30,0,0.22)' : 'rgba(255,255,255,0.06)'
+  const horizonStroke  = panelIsLight ? 'rgba(60,30,0,0.25)' : 'rgba(255,255,255,0.13)'
 
   const sunX = (displayMinutes / 1440) * arc.W
   const sunY = arc.altToY(displayAlt)
@@ -415,11 +427,11 @@ export default function LightLevels() {
               {selectedItem ? (
                 <>
                   <div className="w-2 h-2 rounded-full bg-fire-400 shadow-[0_0_6px_rgba(232,95,0,0.8)]" />
-                  <span className="text-xs font-semibold text-smoke-200 truncate">{selectedItem.title}</span>
-                  <button onClick={() => setSelectedId(null)} className="text-smoke-500 hover:text-smoke-200 ml-auto tap-highlight-none text-sm leading-none">✕</button>
+                  <span className={cn('text-xs font-semibold truncate', panelText.strong)}>{selectedItem.title}</span>
+                  <button onClick={() => setSelectedId(null)} className={cn('ml-auto tap-highlight-none text-sm leading-none', panelText.muted)}>✕</button>
                 </>
               ) : (
-                <span className="text-xs text-smoke-500 italic">Showing now — tap an event below to set its time</span>
+                <span className={cn('text-xs italic', panelText.muted)}>Showing now — tap an event below to set its time</span>
               )}
             </div>
 
@@ -439,11 +451,11 @@ export default function LightLevels() {
               </defs>
 
               {/* Horizon */}
-              <line x1={0} y1={arc.horizonY} x2={arc.W} y2={arc.horizonY} stroke="rgba(255,255,255,0.13)" strokeWidth={0.6} />
+              <line x1={0} y1={arc.horizonY} x2={arc.W} y2={arc.horizonY} stroke={horizonStroke} strokeWidth={0.6} />
 
               {/* Sun path (clean — no overlays here) */}
-              {arc.abovePath && <path d={arc.abovePath} fill="none" stroke="rgba(255,150,60,0.35)" strokeWidth={1.4} strokeDasharray="5 5" strokeLinecap="round" />}
-              {arc.belowPath && <path d={arc.belowPath} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={1} strokeDasharray="3 7" strokeLinecap="round" />}
+              {arc.abovePath && <path d={arc.abovePath} fill="none" stroke={arcAboveStroke} strokeWidth={1.4} strokeDasharray="5 5" strokeLinecap="round" />}
+              {arc.belowPath && <path d={arc.belowPath} fill="none" stroke={arcBelowStroke} strokeWidth={1} strokeDasharray="3 7" strokeLinecap="round" />}
 
               {/* Sunset tick on the horizon */}
               {sunsetMinutes != null && (
@@ -471,19 +483,23 @@ export default function LightLevels() {
                     setDragTime(Math.max(sliderMin, Math.min(sliderMax, timeToMinutes(e.target.value))))
                   }}
                   onBlur={handleSliderCommit}
-                  className="bg-transparent text-center text-4xl font-bold text-white tabular-nums tracking-wide
-                    focus:outline-none [color-scheme:dark] mx-auto block w-auto
-                    [&::-webkit-calendar-picker-indicator]:hidden
-                    [&::-webkit-calendar-picker-indicator]:appearance-none"
+                  className={cn(
+                    'bg-transparent text-center text-4xl font-bold tabular-nums tracking-wide',
+                    'focus:outline-none mx-auto block w-auto',
+                    panelIsLight ? '[color-scheme:light]' : '[color-scheme:dark]',
+                    panelText.strong,
+                    '[&::-webkit-calendar-picker-indicator]:hidden',
+                    '[&::-webkit-calendar-picker-indicator]:appearance-none'
+                  )}
                 />
               ) : (
-                <div className="text-4xl font-bold text-white tabular-nums tracking-wide">{minutesToTime(displayMinutes)}</div>
+                <div className={cn('text-4xl font-bold tabular-nums tracking-wide', panelText.strong)}>{minutesToTime(displayMinutes)}</div>
               )}
               <div className="flex items-center justify-center gap-2 mt-1 flex-wrap">
                 <span className="text-sm">{phaseEmoji(displayAlt)}</span>
-                <span className="text-xs text-smoke-400">{displayLight}% light</span>
-                <span className="text-xs text-smoke-600">·</span>
-                <span className="text-xs text-smoke-500">{Math.abs(displayAlt).toFixed(1)}° {displayAlt >= 0 ? 'above' : 'below'}</span>
+                <span className={cn('text-xs', panelText.body)}>{displayLight}% light</span>
+                <span className={cn('text-xs', panelText.faint)}>·</span>
+                <span className={cn('text-xs', panelText.muted)}>{Math.abs(displayAlt).toFixed(1)}° {displayAlt >= 0 ? 'above' : 'below'}</span>
                 {(() => {
                   const b = timingZoneBadge(displayMinutes, smartTiming)
                   return b && (
@@ -534,12 +550,12 @@ export default function LightLevels() {
 
                 {/* Slider scale labels */}
                 <div className="relative h-3 mt-1">
-                  <span className="absolute left-0 text-[9px] text-smoke-600 uppercase tracking-wider">{minutesToTime(sliderMin)}</span>
+                  <span className={cn('absolute left-0 text-[9px] uppercase tracking-wider', panelText.faint)}>{minutesToTime(sliderMin)}</span>
                   {sunsetPct != null && sunsetPct > 12 && sunsetPct < 88 && (
-                    <span className="absolute -translate-x-1/2 text-[9px] text-amber-500/80 uppercase tracking-wider"
+                    <span className={cn('absolute -translate-x-1/2 text-[9px] uppercase tracking-wider', panelIsLight ? 'text-amber-900/80' : 'text-amber-500/80')}
                       style={{ left: `${sunsetPct}%` }}>sunset</span>
                   )}
-                  <span className="absolute right-0 text-[9px] text-smoke-600 uppercase tracking-wider">{minutesToTime(sliderMax)}</span>
+                  <span className={cn('absolute right-0 text-[9px] uppercase tracking-wider', panelText.faint)}>{minutesToTime(sliderMax)}</span>
                 </div>
               </div>
             )}

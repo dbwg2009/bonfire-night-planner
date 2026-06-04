@@ -62,6 +62,8 @@ export const api = {
     request<unknown>('/events', { method: 'POST', body: JSON.stringify(data) }),
   updateEvent: (id: string, data: unknown) =>
     request<unknown>(`/events/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteEvent: (id: string) =>
+    request<{ success: boolean }>(`/events/${id}`, { method: 'DELETE' }),
 
   // Guests
   getGuests: (eventId: string) => request<unknown[]>(`/events/${eventId}/guests`),

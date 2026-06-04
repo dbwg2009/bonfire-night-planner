@@ -24,6 +24,7 @@ export interface Event {
   setup_duration_mins?: number    // minutes needed for setup at venue, default 30
   slider_time_start?: string      // slider left bound e.g. "00:00"
   slider_time_end?: string        // slider right bound e.g. "23:59"
+  rsvp_enabled: boolean           // controls the public dashboard and /rsvp route
   created_at: string
   updated_at: string
 }

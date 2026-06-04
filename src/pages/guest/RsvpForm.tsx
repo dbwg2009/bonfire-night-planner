@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useParams } from 'react-router-dom'
 import { CheckCircle2 } from 'lucide-react'
 import { Card } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
@@ -58,6 +59,7 @@ type InvitedGuest = { id: string; name: string }
 type PickupSlot = { id: string; label: string }
 
 export default function RsvpForm() {
+  const { eventId } = useParams<{ eventId?: string }>()
   const storeEvent = useEventStore(s => s.currentEvent)
   const [publicEvent, setPublicEvent] = useState<PublicEvent | null>(null)
   const [invitedGuests, setInvitedGuests] = useState<InvitedGuest[]>([])
@@ -72,7 +74,8 @@ export default function RsvpForm() {
   useEffect(() => {
     async function load() {
       try {
-        const evRes = await fetch('/api/public/event')
+        const evUrl = eventId ? `/api/public/event/${eventId}` : '/api/public/event'
+        const evRes = await fetch(evUrl)
         if (!evRes.ok) return
         const ev = await evRes.json() as PublicEvent
         setPublicEvent(ev)

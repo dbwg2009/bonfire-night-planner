@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { CreditCard, MapPin, Flame, Settings, ChevronRight, LogOut, ListTodo, History, Plus, Trophy, Car } from 'lucide-react'
+import { CreditCard, MapPin, Flame, Settings, ChevronRight, LogOut, ListTodo, History, Plus, Trophy, Car, Calendar } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Card } from '../../components/ui/card'
 import { PageHeader, PageContent } from '../../components/Layout'
@@ -24,7 +24,10 @@ export default function More() {
     queryFn: () => api.getEvents() as Promise<Event[]>
   })
 
-  const pastEvents = allEvents.filter(e => e.id !== event?.id).sort((a, b) => b.year - a.year)
+  const today = new Date().toISOString().slice(0, 10)
+  const otherEvents = allEvents.filter(e => e.id !== event?.id).sort((a, b) => b.year - a.year)
+  const upcomingEvents = otherEvents.filter(e => e.date >= today)
+  const pastEvents = otherEvents.filter(e => e.date < today)
 
   function switchToEvent(e: Event) {
     setCurrentEvent(e)
@@ -136,13 +139,13 @@ export default function More() {
           ))}
         </div>
 
-        {/* Previous bonfire nights */}
-        {(pastEvents.length > 0 || canSettings) && (
+        {/* Upcoming events (other years, future dates) */}
+        {(upcomingEvents.length > 0 || canSettings) && (
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
-                <History size={14} className="text-smoke-500" />
-                <p className="text-xs font-semibold text-smoke-400 uppercase tracking-wider">Previous Years</p>
+                <Calendar size={14} className="text-smoke-500" />
+                <p className="text-xs font-semibold text-smoke-400 uppercase tracking-wider">Upcoming Events</p>
               </div>
               {canSettings && (
                 <Link to="/setup" className="flex items-center gap-1 text-xs text-fire-400 hover:text-fire-300 transition-colors">
@@ -151,14 +154,13 @@ export default function More() {
               )}
             </div>
 
-            {pastEvents.length === 0 ? (
+            {upcomingEvents.length === 0 ? (
               <Card className="text-center py-4">
-                <p className="text-xs text-smoke-500">No previous events yet</p>
-                <p className="text-[11px] text-smoke-600 mt-0.5">Past events will appear here after the first year</p>
+                <p className="text-xs text-smoke-500">No other upcoming events</p>
               </Card>
             ) : (
               <div className="space-y-2">
-                {pastEvents.map(e => (
+                {upcomingEvents.map(e => (
                   <button
                     key={e.id}
                     onClick={() => switchToEvent(e)}
@@ -176,6 +178,34 @@ export default function More() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Past events (other years, dates already passed) */}
+        {pastEvents.length > 0 && (
+          <div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <History size={14} className="text-smoke-500" />
+              <p className="text-xs font-semibold text-smoke-400 uppercase tracking-wider">Past Events</p>
+            </div>
+            <div className="space-y-2">
+              {pastEvents.map(e => (
+                <button
+                  key={e.id}
+                  onClick={() => switchToEvent(e)}
+                  className="w-full glass-card flex items-center gap-3 p-3 hover:bg-white/[0.06] active:scale-[0.98] transition-all tap-highlight-none text-left"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-smoke-700/50 flex items-center justify-center shrink-0">
+                    <span className="text-sm font-bold text-smoke-300">{e.year}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-smoke-200">{e.name}</p>
+                    <p className="text-xs text-smoke-500">{formatDate(e.date, 'EEEE d MMMM yyyy')} · {e.status}</p>
+                  </div>
+                  <ChevronRight size={14} className="text-smoke-600 shrink-0" />
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

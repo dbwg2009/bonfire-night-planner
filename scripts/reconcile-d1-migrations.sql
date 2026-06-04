@@ -71,3 +71,18 @@ INSERT OR IGNORE INTO d1_migrations (name) SELECT '0010_light_levels_settings.sq
 -- 0011: events.rsvp_enabled column
 INSERT OR IGNORE INTO d1_migrations (name) SELECT '0011_rsvp_enabled.sql'
   WHERE EXISTS (SELECT 1 FROM pragma_table_info('events') WHERE name='rsvp_enabled');
+
+-- 0011 also has a DATA side-effect: enable RSVP for the latest non-archived event.
+-- Marking the migration applied on column-existence alone would skip that backfill
+-- on a DB that got the column ad-hoc. Re-apply it idempotently (no-op once any
+-- event already has rsvp_enabled = 1, so a deliberate "RSVP off everywhere" state
+-- set *after* the backfill is left untouched as long as one event still has it on).
+UPDATE events SET rsvp_enabled = 1
+WHERE EXISTS (SELECT 1 FROM pragma_table_info('events') WHERE name='rsvp_enabled')
+  AND NOT EXISTS (SELECT 1 FROM events WHERE rsvp_enabled = 1)
+  AND id = (
+    SELECT id FROM events
+    WHERE status != 'archived'
+    ORDER BY year DESC
+    LIMIT 1
+  );

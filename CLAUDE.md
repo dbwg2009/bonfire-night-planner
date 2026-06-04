@@ -69,13 +69,14 @@ Build: `npm run build` (runs `tsc -b && vite build`)
 - Always create a numbered migration file for every schema change — never modify the DB schema ad hoc. Use only additive `ALTER TABLE ADD COLUMN` / `CREATE TABLE` so the tracked runner stays append-only.
 - Flag DB migrations in PR descriptions so they are easy to spot.
 
-### One-time reconciliation (already done on prod once)
-The project switched from ad-hoc `wrangler d1 execute` to the tracked runner. Any database that had migrations applied the *old* way must be reconciled once so the runner doesn't try to re-run already-applied migrations:
+### One-time reconciliation (RUN THIS on prod after merging the tracked-migrations change)
+The project switched from ad-hoc `wrangler d1 execute` to the tracked runner. Any database that had migrations applied the *old* way **must be reconciled once** so the runner doesn't try to re-run already-applied migrations. **This has not been done on production yet — run it post-merge and verify with `db:migrate:status`:**
 ```bash
-npm run db:reconcile:prod   # marks already-present migrations as applied in d1_migrations
-npm run db:migrate:prod     # then runs only the genuinely-missing ones
+npm run db:reconcile:prod   # mark already-present migrations as applied in d1_migrations
+npm run db:migrate:prod     # then run only the genuinely-missing ones
+npm run db:migrate:status   # verify: should report nothing left to apply
 ```
-`scripts/reconcile-d1-migrations.sql` is self-detecting and idempotent — it marks a migration applied only if its signature column/table actually exists. A brand-new database needs no reconciliation; just run `db:migrate`.
+`scripts/reconcile-d1-migrations.sql` is self-detecting and idempotent — it marks a migration applied only if its signature column/table actually exists, and re-applies the `0011` rsvp backfill if a database got the column without it. A brand-new database needs no reconciliation; just run `db:migrate`.
 
 ---
 

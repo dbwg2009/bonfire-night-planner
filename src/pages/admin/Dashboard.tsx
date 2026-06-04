@@ -94,7 +94,7 @@ export default function Dashboard() {
   return (
     <div className="animate-fade-in">
       {/* Header */}
-      <div className="pl-4 pr-14 pt-6 pb-4 flex items-start justify-between">
+      <div className="px-4 pt-6 pb-4 flex items-start justify-between">
         <div>
           <p className="text-xs text-fire-400/70 uppercase tracking-widest font-medium">Welcome back</p>
           <h1 className="text-2xl font-bold text-smoke-100 mt-0.5">{organiser?.name}</h1>

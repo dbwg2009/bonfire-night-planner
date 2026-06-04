@@ -19,6 +19,11 @@ const DEFAULT_LAT = 51.822
 const DEFAULT_LON = -3.016
 const FIREWORKS_THRESHOLD = 10
 
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
 function getLightPercent(timeStr: string, date: Date, lat: number, lon: number): number {
   const [h, m] = timeStr.split(':').map(Number)
   const d = new Date(date)
@@ -39,7 +44,7 @@ export default function Schedule() {
 
   const lat = event?.lat ?? DEFAULT_LAT
   const lon = event?.lon ?? DEFAULT_LON
-  const eventDate = event ? new Date(event.date) : new Date()
+  const eventDate = event ? parseLocalDate(event.date) : new Date()
 
   const { data: items = [], isLoading } = useQuery<ScheduleItem[]>({
     queryKey: ['schedule', event?.id],
@@ -51,10 +56,12 @@ export default function Schedule() {
 
   const save = useMutation({
     mutationFn: async (data: typeof form) => {
-      const payload = {
-        ...data,
-        light_level_target: data.light_level_target === '' ? null : Number(data.light_level_target)
-      }
+      const raw = String(data.light_level_target).trim()
+      const parsed = raw === '' ? null : Number(raw)
+      const light_level_target = parsed === null || (Number.isFinite(parsed) && parsed >= 0 && parsed <= 100)
+        ? (parsed === null ? null : Math.round(parsed))
+        : null
+      const payload = { ...data, light_level_target }
       if (editing) return api.updateScheduleItem(event!.id, editing.id, payload)
       return api.createScheduleItem(event!.id, { ...payload, id: generateId(), event_id: event!.id, sort_order: items.length })
     },

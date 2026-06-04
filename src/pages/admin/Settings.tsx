@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Shield } from 'lucide-react'
+import { Plus, Pencil, Trash2, Shield, Copy, Check } from 'lucide-react'
 import { Card } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
@@ -20,8 +21,10 @@ const DEFAULT_PERMS: OrgPermissions = { guest_management: false, finance: false,
 export default function Settings() {
   const event = useEventStore(s => s.currentEvent)
   const setCurrentEvent = useEventStore(s => s.setCurrentEvent)
+  const setEvents = useEventStore(s => s.setEvents)
   const organiser = useAuthStore(s => s.organiser)
   const qc = useQueryClient()
+  const navigate = useNavigate()
 
   const [eventForm, setEventForm] = useState({
     name: event?.name ?? '',
@@ -41,10 +44,13 @@ export default function Settings() {
     slider_time_start: event?.slider_time_start ?? '00:00',
     slider_time_end: event?.slider_time_end ?? '23:59',
     contribution_link: event?.contribution_link ?? '',
-    contribution_match_ratio: event?.contribution_match_ratio ?? 0
+    contribution_match_ratio: event?.contribution_match_ratio ?? 0,
+    rsvp_enabled: event?.rsvp_enabled ?? false
   })
 
   const [orgOpen, setOrgOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
   const [editingOrg, setEditingOrg] = useState<Organiser | null>(null)
   const [orgForm, setOrgForm] = useState({ name: '', pin: '', color: '#e85f00', is_owner: false, permissions: DEFAULT_PERMS })
 
@@ -76,6 +82,26 @@ export default function Settings() {
     mutationFn: (id: string) => api.deleteOrganiser(event!.id, id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['organisers'] }); toast('Organiser removed') }
   })
+
+  const deleteEvent = useMutation({
+    mutationFn: () => api.deleteEvent(event!.id),
+    onSuccess: () => {
+      setCurrentEvent(null)
+      setEvents([])
+      qc.clear()
+      toast('Event deleted')
+      navigate('/setup')
+    },
+    onError: () => toast('Failed to delete event', 'error')
+  })
+
+  function copyRsvpLink() {
+    const url = `${window.location.origin}/rsvp/${event!.id}`
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   const canEditSettings = organiser?.is_owner || organiser?.permissions.tasks_and_settings
 
@@ -112,6 +138,35 @@ export default function Settings() {
             <div>
               <label className="text-xs text-smoke-400 mb-1 block">Event location (destination)</label>
               <Input value={eventForm.event_location} onChange={e => setEventForm(f => ({ ...f, event_location: e.target.value }))} placeholder="Newton Court Farm" />
+            </div>
+            <div className="flex items-center justify-between pt-1">
+              <div>
+                <p className="text-sm text-smoke-200">RSVP enabled</p>
+                <p className="text-[11px] text-smoke-500">Show this event on the public RSVP page and guest dashboard</p>
+              </div>
+              <Switch
+                checked={eventForm.rsvp_enabled}
+                onCheckedChange={v => setEventForm(f => ({ ...f, rsvp_enabled: v }))}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-smoke-400 mb-1 block">RSVP link for this event</label>
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={event ? `${window.location.origin}/rsvp/${event.id}` : ''}
+                  className="text-xs text-smoke-400 cursor-default select-all"
+                />
+                <button
+                  type="button"
+                  onClick={copyRsvpLink}
+                  aria-label="Copy RSVP link"
+                  className="shrink-0 p-2 rounded-lg text-smoke-400 hover:text-smoke-200 hover:bg-white/[0.06] transition-colors tap-highlight-none"
+                >
+                  {copied ? <Check size={15} className="text-emerald-400" /> : <Copy size={15} />}
+                </button>
+              </div>
+              <p className="text-[11px] text-smoke-500 mt-1">Share this link with guests — it works independently of the RSVP toggle above.</p>
             </div>
           </div>
         </Card>
@@ -260,6 +315,16 @@ export default function Settings() {
           {saveEvent.isPending ? 'Saving…' : 'Save Event Settings'}
         </Button>
 
+        {organiser?.is_owner && (
+          <button
+            type="button"
+            onClick={() => setDeleteOpen(true)}
+            className="w-full text-xs text-red-400/60 hover:text-red-400 transition-colors py-2 tap-highlight-none"
+          >
+            Delete this event…
+          </button>
+        )}
+
         {/* Organisers */}
         <div className="flex items-center justify-between pt-2">
           <h2 className="text-sm font-semibold text-smoke-300">Organisers</h2>
@@ -351,6 +416,27 @@ export default function Settings() {
             <Button variant="ghost" onClick={() => setOrgOpen(false)}>Cancel</Button>
             <Button onClick={() => saveOrg.mutate(orgForm)} disabled={!orgForm.name.trim() || saveOrg.isPending}>
               {saveOrg.isPending ? 'Saving…' : editingOrg ? 'Save' : 'Add Organiser'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Delete event dialog */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete "{event?.name}"?</DialogTitle>
+            <DialogDescription>
+              This will permanently delete the event and all associated data — guests, tasks, schedule, finances, and more. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteEvent.mutate()}
+              disabled={deleteEvent.isPending}
+            >
+              {deleteEvent.isPending ? 'Deleting…' : 'Delete everything'}
             </Button>
           </DialogFooter>
         </DialogContent>

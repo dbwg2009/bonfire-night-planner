@@ -23,12 +23,23 @@ export default function EventSetup() {
     event_location: ''
   })
 
+  function handleDateChange(newDate: string) {
+    const newYear = new Date(newDate).getFullYear()
+    const prevYear = new Date(form.date).getFullYear()
+    setForm(f => ({
+      ...f,
+      date: newDate,
+      name: f.name === `Bonfire Night ${prevYear}` ? `Bonfire Night ${newYear}` : f.name
+    }))
+  }
+
   async function create() {
+    const year = new Date(form.date).getFullYear()
     setLoading(true)
     try {
       const event = await api.createEvent({
         id: generateId(),
-        year: currentYear,
+        year,
         ...form,
         status: 'planning',
         conflict_event_enabled: false,
@@ -64,7 +75,7 @@ export default function EventSetup() {
           </div>
           <div>
             <label className="text-xs text-smoke-400 mb-1 block">Date</label>
-            <Input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
+            <Input type="date" value={form.date} onChange={e => handleDateChange(e.target.value)} />
           </div>
           <div>
             <label className="text-xs text-smoke-400 mb-1 block">Meeting location</label>

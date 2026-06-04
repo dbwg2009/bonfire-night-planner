@@ -65,7 +65,8 @@ function mapEvent(row: Record<string, unknown>) {
   return {
     ...row,
     conflict_event_enabled: row.conflict_event_enabled === 1,
-    contribution_match_ratio: row.contribution_match_ratio ?? 0
+    contribution_match_ratio: row.contribution_match_ratio ?? 0,
+    rsvp_enabled: row.rsvp_enabled === 1
   }
 }
 
@@ -110,12 +111,21 @@ function mapLocation(row: Record<string, unknown>) {
 
 // ─── Public (no auth) ─────────────────────────────────────────────────────────
 
-// Returns safe public event info for the guest-facing view
+// Returns safe public event info for the guest-facing view (the rsvp_enabled event)
 app.get('/api/public/event', async (c) => {
   const event = await c.env.DB.prepare(
-    "SELECT id, year, name, date, meeting_location, event_location, conflict_event_enabled, conflict_event_name, contribution_link, contribution_match_ratio FROM events WHERE status != 'archived' ORDER BY year DESC LIMIT 1"
+    'SELECT id, year, name, date, meeting_location, event_location, conflict_event_enabled, conflict_event_name, contribution_link, contribution_match_ratio, rsvp_enabled FROM events WHERE rsvp_enabled = 1 ORDER BY year DESC LIMIT 1'
   ).first()
   if (!event) return c.json({ error: 'No active event' }, 404)
+  return c.json(mapEvent(event as Record<string, unknown>))
+})
+
+// Returns public event info for a specific event by ID (used for per-event RSVP URLs)
+app.get('/api/public/event/:id', async (c) => {
+  const event = await c.env.DB.prepare(
+    "SELECT id, year, name, date, meeting_location, event_location, conflict_event_enabled, conflict_event_name, contribution_link, contribution_match_ratio, rsvp_enabled FROM events WHERE id = ? AND status != 'archived'"
+  ).bind(c.req.param('id')).first()
+  if (!event) return c.json({ error: 'Event not found' }, 404)
   return c.json(mapEvent(event as Record<string, unknown>))
 })
 
@@ -282,6 +292,10 @@ app.post('/api/auth/login', async (c) => {
 // ─── Events ────────────────────────────────────────────────────────────────────
 
 app.get('/api/events', requireAuth(async (c) => {
+  // Auto-archive any event whose date passed more than 2 days ago
+  await c.env.DB.prepare(
+    "UPDATE events SET status = 'archived', updated_at = datetime('now') WHERE status != 'archived' AND date <= date('now', '-2 days')"
+  ).run()
   const events = await c.env.DB.prepare('SELECT * FROM events ORDER BY year DESC').all()
   return c.json(events.results.map(mapEvent))
 }))
@@ -317,8 +331,8 @@ app.put('/api/events/:id', requireAuth(async (c, org) => {
 
   try {
     await c.env.DB.prepare(
-      'UPDATE events SET name=?, date=?, meeting_location=?, event_location=?, conflict_event_enabled=?, conflict_event_name=?, food_split_ratio=?, food_buffer_factor=?, contribution_link=?, contribution_match_ratio=?, light_walk_by=?, light_fireworks_after=?, light_notes=?, lat=?, lon=?, setup_duration_mins=?, slider_time_start=?, slider_time_end=?, updated_at=datetime("now") WHERE id=?'
-    ).bind(body.name, body.date, body.meeting_location ?? '', body.event_location ?? '', body.conflict_event_enabled ? 1 : 0, body.conflict_event_name ?? '', body.food_split_ratio ?? 0.6, body.food_buffer_factor ?? 1.1, body.contribution_link ?? null, body.contribution_match_ratio ?? 0, body.light_walk_by ?? '', body.light_fireworks_after ?? '', body.light_notes ?? '', body.lat ?? null, body.lon ?? null, setupDuration, sliderStart, sliderEnd, c.req.param('id')).run()
+      'UPDATE events SET name=?, date=?, meeting_location=?, event_location=?, conflict_event_enabled=?, conflict_event_name=?, food_split_ratio=?, food_buffer_factor=?, contribution_link=?, contribution_match_ratio=?, light_walk_by=?, light_fireworks_after=?, light_notes=?, lat=?, lon=?, setup_duration_mins=?, slider_time_start=?, slider_time_end=?, rsvp_enabled=?, updated_at=datetime("now") WHERE id=?'
+    ).bind(body.name, body.date, body.meeting_location ?? '', body.event_location ?? '', body.conflict_event_enabled ? 1 : 0, body.conflict_event_name ?? '', body.food_split_ratio ?? 0.6, body.food_buffer_factor ?? 1.1, body.contribution_link ?? null, body.contribution_match_ratio ?? 0, body.light_walk_by ?? '', body.light_fireworks_after ?? '', body.light_notes ?? '', body.lat ?? null, body.lon ?? null, setupDuration, sliderStart, sliderEnd, body.rsvp_enabled ? 1 : 0, c.req.param('id')).run()
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     // Surface the real D1 error so missing-column / unapplied-migration failures
@@ -327,6 +341,29 @@ app.put('/api/events/:id', requireAuth(async (c, org) => {
   }
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(c.req.param('id')).first()
   return c.json(mapEvent(event as Record<string, unknown>))
+}))
+
+app.delete('/api/events/:id', requireAuth(async (c, org) => {
+  if (!org.is_owner) return c.json({ error: 'Forbidden' }, 403)
+  const id = c.req.param('id')
+  const existing = await c.env.DB.prepare('SELECT id FROM events WHERE id = ?').bind(id).first()
+  if (!existing) return c.json({ error: 'Not found' }, 404)
+  // Manual cascade delete — D1 foreign key enforcement is not guaranteed
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM notifications WHERE event_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM checkins WHERE event_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM guests WHERE event_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM tasks WHERE event_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM schedule_items WHERE event_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM transactions WHERE event_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM locations WHERE event_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM conflict_schedule WHERE event_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM milestones WHERE event_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM pickup_slots WHERE event_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM organisers WHERE event_id = ?').bind(id),
+    c.env.DB.prepare('DELETE FROM events WHERE id = ?').bind(id),
+  ])
+  return c.json({ success: true })
 }))
 
 // ─── Guests ────────────────────────────────────────────────────────────────────

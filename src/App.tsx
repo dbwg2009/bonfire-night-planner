@@ -59,6 +59,7 @@ export default function App() {
           {/* Public guest pages — no nav bar, standalone pages */}
           <Route path="/" element={<GuestDashboard />} />
           <Route path="/rsvp" element={<RsvpForm />} />
+          <Route path="/rsvp/:eventId" element={<RsvpForm />} />
           <Route path="/tracker" element={<Tracker />} />
           <Route path="/status" element={<Status />} />
 

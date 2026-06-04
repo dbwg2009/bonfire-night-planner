@@ -99,13 +99,13 @@ function phaseEmoji(altDeg: number): string {
   return '🌑'
 }
 
-// Warm ember background — visible depth at all light levels
+// Warm ember background — reads as warm-dark, never flat black
 function skyPanelStyle(altDeg: number): React.CSSProperties {
   const pct = lightPctFromAlt(altDeg)
-  if (pct >= 50) return { background: 'linear-gradient(180deg, #2e1a06 0%, #1a0e04 100%)' }
-  if (pct >= 20) return { background: 'linear-gradient(180deg, #261208 0%, #150b05 100%)' }
-  if (pct >= 5)  return { background: 'linear-gradient(180deg, #1e0e0e 0%, #100809 100%)' }
-  return { background: 'linear-gradient(180deg, #130e1e 0%, #080610 100%)' }
+  if (pct >= 50) return { background: 'linear-gradient(180deg, #5a3410 0%, #2a1808 100%)' }
+  if (pct >= 20) return { background: 'linear-gradient(180deg, #4a260e 0%, #24130a 100%)' }
+  if (pct >= 5)  return { background: 'linear-gradient(180deg, #3a1c12 0%, #1d100c 100%)' }
+  return { background: 'linear-gradient(180deg, #2c1a16 0%, #150d0c 100%)' }
 }
 
 function phaseBadge(altDeg: number): { label: string; cls: string } | null {
@@ -475,11 +475,14 @@ export default function LightLevels() {
                 <span className="text-xs text-smoke-400">{displayLight}% light</span>
                 <span className="text-xs text-smoke-600">·</span>
                 <span className="text-xs text-smoke-500">{Math.abs(displayAlt).toFixed(1)}° {displayAlt >= 0 ? 'above' : 'below'}</span>
-                {idealNow && (
-                  <span className="text-[10px] bg-purple-500/20 text-purple-200 border border-purple-400/25 px-2 py-0.5 rounded-full">
-                    🎆 ideal for fireworks
-                  </span>
-                )}
+                {(() => {
+                  const b = phaseBadge(displayAlt)
+                  return b && (
+                    <span className={cn('text-[10px] border px-2 py-0.5 rounded-full', b.cls)}>
+                      {idealNow ? '🎆 ideal for fireworks' : b.label}
+                    </span>
+                  )
+                })()}
               </div>
             </div>
 

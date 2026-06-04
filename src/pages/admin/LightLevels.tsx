@@ -99,13 +99,22 @@ function phaseEmoji(altDeg: number): string {
   return '🌑'
 }
 
-// Subtle dark base; the warm glow comes from the SVG sun so it always tracks it.
+// Warm ember background — visible depth at all light levels
 function skyPanelStyle(altDeg: number): React.CSSProperties {
   const pct = lightPctFromAlt(altDeg)
-  if (pct >= 50) return { background: 'linear-gradient(180deg, #1c1408 0%, #0c0a07 100%)' }
-  if (pct >= 20) return { background: 'linear-gradient(180deg, #170f08 0%, #0a0806 100%)' }
-  if (pct >= 5)  return { background: 'linear-gradient(180deg, #110b0b 0%, #070607 100%)' }
-  return { background: 'linear-gradient(180deg, #0b0810 0%, #050406 100%)' }
+  if (pct >= 50) return { background: 'linear-gradient(180deg, #2e1a06 0%, #1a0e04 100%)' }
+  if (pct >= 20) return { background: 'linear-gradient(180deg, #261208 0%, #150b05 100%)' }
+  if (pct >= 5)  return { background: 'linear-gradient(180deg, #1e0e0e 0%, #100809 100%)' }
+  return { background: 'linear-gradient(180deg, #130e1e 0%, #080610 100%)' }
+}
+
+function phaseBadge(altDeg: number): { label: string; cls: string } | null {
+  const pct = lightPctFromAlt(altDeg)
+  if (pct <= FIREWORKS_MAX_LIGHT) return { label: '🎆 fireworks', cls: 'bg-purple-500/15 text-purple-200 border-purple-400/20' }
+  if (pct <= 20) return { label: '🔥 bonfire window', cls: 'bg-orange-500/15 text-orange-200 border-orange-400/20' }
+  if (pct <= 40) return { label: '🌆 deep twilight', cls: 'bg-red-500/15 text-red-200 border-red-400/20' }
+  if (pct <= 70) return { label: '🌇 golden hour', cls: 'bg-amber-500/15 text-amber-200 border-amber-400/20' }
+  return null
 }
 
 // ─── Arc geometry ────────────────────────────────────────────────────────────────
@@ -241,12 +250,6 @@ export default function LightLevels() {
   }, [sunTimes])
   const defaultMinutes = sunsetMinutes ?? 18 * 60
 
-  const arc = useMemo(() => buildArc(eventDate, lat, lon), [eventDate, lat, lon])
-  const trackStyle = useMemo(
-    () => buildTrackStyle(sliderMin, sliderMax, eventDate, lat, lon),
-    [sliderMin, sliderMax, eventDate, lat, lon]
-  )
-
   const { data: items = [], isLoading } = useQuery<ScheduleItem[]>({
     queryKey: ['schedule', event?.id],
     queryFn: () => api.getSchedule(event!.id) as Promise<ScheduleItem[]>,
@@ -283,6 +286,15 @@ export default function LightLevels() {
 
   const selectedItem = items.find(i => i.id === selectedId) ?? null
 
+  // When nothing is selected, show where the sun is right now (today), not the event date
+  const displayDate = useMemo(() => selectedItem ? eventDate : new Date(), [selectedItem, eventDate])
+
+  const arc = useMemo(() => buildArc(displayDate, lat, lon), [displayDate, lat, lon])
+  const trackStyle = useMemo(
+    () => buildTrackStyle(sliderMin, sliderMax, eventDate, lat, lon),
+    [sliderMin, sliderMax, eventDate, lat, lon]
+  )
+
   const displayMinutes: number = useMemo(() => {
     if (selectedItem) {
       return dragTime ?? (selectedItem.start_time ? timeToMinutes(selectedItem.start_time) : defaultMinutes)
@@ -291,7 +303,7 @@ export default function LightLevels() {
     return now.getHours() * 60 + now.getMinutes()
   }, [selectedItem, dragTime, defaultMinutes])
 
-  const displayAlt = getSunAltDeg(displayMinutes, eventDate, lat, lon)
+  const displayAlt = getSunAltDeg(displayMinutes, displayDate, lat, lon)
   const displayLight = lightPctFromAlt(displayAlt)
   const idealNow = isFireworksIdeal(displayAlt)
 
@@ -574,7 +586,7 @@ export default function LightLevels() {
                   const mins = item.start_time ? timeToMinutes(item.start_time) : null
                   const alt  = mins != null ? getSunAltDeg(mins, eventDate, lat, lon) : null
                   const lp   = alt != null ? lightPctFromAlt(alt) : null
-                  const ideal = alt != null && isFireworksIdeal(alt)
+                  const badge = alt != null ? phaseBadge(alt) : null
 
                   return (
                     <div key={item.id}
@@ -598,8 +610,8 @@ export default function LightLevels() {
                           ? <p className="text-sm font-bold text-smoke-100 tabular-nums">{item.start_time}</p>
                           : <p className="text-xs text-smoke-600 italic">tap to set time</p>}
                         {lp != null && <p className="text-[10px] text-smoke-500">{lp}% light</p>}
-                        {ideal && (
-                          <span className="text-[9px] bg-purple-500/15 text-purple-200 border border-purple-400/20 px-1.5 py-0.5 rounded-full mt-1 inline-block">🎆 fireworks</span>
+                        {badge && (
+                          <span className={cn('text-[9px] border px-1.5 py-0.5 rounded-full mt-1 inline-block', badge.cls)}>{badge.label}</span>
                         )}
                       </div>
                     </div>

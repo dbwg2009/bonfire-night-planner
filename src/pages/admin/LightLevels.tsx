@@ -401,10 +401,14 @@ export default function LightLevels() {
 
   // ─── Marker positions (slider track only — never on the arc) ─────────────────
 
+  const bonStart = dateToMinutes(smartTiming.bonfireStart)
+  const bonEnd   = dateToMinutes(smartTiming.bonfireEnd)
+  const fwAfter  = dateToMinutes(smartTiming.fireworksAfter)
+
   const sunsetPct       = sunsetMinutes != null ? minsToSliderPct(sunsetMinutes) : null
-  const bonfireStartPct = dateToMinutes(smartTiming.bonfireStart) != null ? minsToSliderPct(dateToMinutes(smartTiming.bonfireStart)!) : null
-  const bonfireEndPct   = dateToMinutes(smartTiming.bonfireEnd) != null ? minsToSliderPct(dateToMinutes(smartTiming.bonfireEnd)!) : null
-  const fireworksPct    = dateToMinutes(smartTiming.fireworksAfter) != null ? minsToSliderPct(dateToMinutes(smartTiming.fireworksAfter)!) : null
+  const bonfireStartPct = bonStart != null ? minsToSliderPct(bonStart) : null
+  const bonfireEndPct   = bonEnd   != null ? minsToSliderPct(bonEnd)   : null
+  const fireworksPct    = fwAfter  != null ? minsToSliderPct(fwAfter)  : null
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
@@ -537,6 +541,7 @@ export default function LightLevels() {
                     onChange={handleSliderChange}
                     onMouseUp={handleSliderCommit}
                     onTouchEnd={handleSliderCommit}
+                    onBlur={handleSliderCommit}
                     className="absolute inset-x-0 top-1/2 -translate-y-1/2 w-full appearance-none bg-transparent cursor-pointer
                       [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
                       [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white

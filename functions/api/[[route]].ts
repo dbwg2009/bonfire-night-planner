@@ -305,9 +305,19 @@ app.put('/api/events/:id', requireAuth(async (c, org) => {
   if (org.event_id !== c.req.param('id')) return c.json({ error: 'Forbidden' }, 403)
   if (!org.is_owner && !org.permissions?.tasks_and_settings) return c.json({ error: 'Forbidden' }, 403)
   const body = await c.req.json()
+
+  // Normalise light-level slider fields so bad payloads can't break timing math
+  const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/
+  const toMins = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
+  const rawSetup = Number(body.setup_duration_mins)
+  const setupDuration = Number.isFinite(rawSetup) ? Math.min(180, Math.max(0, Math.round(rawSetup))) : 30
+  let sliderStart = typeof body.slider_time_start === 'string' && TIME_RE.test(body.slider_time_start) ? body.slider_time_start : '00:00'
+  let sliderEnd   = typeof body.slider_time_end === 'string'   && TIME_RE.test(body.slider_time_end)   ? body.slider_time_end   : '23:59'
+  if (toMins(sliderStart) >= toMins(sliderEnd)) { sliderStart = '00:00'; sliderEnd = '23:59' }
+
   await c.env.DB.prepare(
     'UPDATE events SET name=?, date=?, meeting_location=?, event_location=?, conflict_event_enabled=?, conflict_event_name=?, food_split_ratio=?, food_buffer_factor=?, contribution_link=?, contribution_match_ratio=?, light_walk_by=?, light_fireworks_after=?, light_notes=?, lat=?, lon=?, setup_duration_mins=?, slider_time_start=?, slider_time_end=?, updated_at=datetime("now") WHERE id=?'
-  ).bind(body.name, body.date, body.meeting_location ?? '', body.event_location ?? '', body.conflict_event_enabled ? 1 : 0, body.conflict_event_name ?? '', body.food_split_ratio ?? 0.6, body.food_buffer_factor ?? 1.1, body.contribution_link ?? null, body.contribution_match_ratio ?? 0, body.light_walk_by ?? '', body.light_fireworks_after ?? '', body.light_notes ?? '', body.lat ?? null, body.lon ?? null, body.setup_duration_mins ?? 30, body.slider_time_start ?? '00:00', body.slider_time_end ?? '23:59', c.req.param('id')).run()
+  ).bind(body.name, body.date, body.meeting_location ?? '', body.event_location ?? '', body.conflict_event_enabled ? 1 : 0, body.conflict_event_name ?? '', body.food_split_ratio ?? 0.6, body.food_buffer_factor ?? 1.1, body.contribution_link ?? null, body.contribution_match_ratio ?? 0, body.light_walk_by ?? '', body.light_fireworks_after ?? '', body.light_notes ?? '', body.lat ?? null, body.lon ?? null, setupDuration, sliderStart, sliderEnd, c.req.param('id')).run()
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(c.req.param('id')).first()
   return c.json(mapEvent(event as Record<string, unknown>))
 }))

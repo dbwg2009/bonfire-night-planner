@@ -315,9 +315,16 @@ app.put('/api/events/:id', requireAuth(async (c, org) => {
   let sliderEnd   = typeof body.slider_time_end === 'string'   && TIME_RE.test(body.slider_time_end)   ? body.slider_time_end   : '23:59'
   if (toMins(sliderStart) >= toMins(sliderEnd)) { sliderStart = '00:00'; sliderEnd = '23:59' }
 
-  await c.env.DB.prepare(
-    'UPDATE events SET name=?, date=?, meeting_location=?, event_location=?, conflict_event_enabled=?, conflict_event_name=?, food_split_ratio=?, food_buffer_factor=?, contribution_link=?, contribution_match_ratio=?, light_walk_by=?, light_fireworks_after=?, light_notes=?, lat=?, lon=?, setup_duration_mins=?, slider_time_start=?, slider_time_end=?, updated_at=datetime("now") WHERE id=?'
-  ).bind(body.name, body.date, body.meeting_location ?? '', body.event_location ?? '', body.conflict_event_enabled ? 1 : 0, body.conflict_event_name ?? '', body.food_split_ratio ?? 0.6, body.food_buffer_factor ?? 1.1, body.contribution_link ?? null, body.contribution_match_ratio ?? 0, body.light_walk_by ?? '', body.light_fireworks_after ?? '', body.light_notes ?? '', body.lat ?? null, body.lon ?? null, setupDuration, sliderStart, sliderEnd, c.req.param('id')).run()
+  try {
+    await c.env.DB.prepare(
+      'UPDATE events SET name=?, date=?, meeting_location=?, event_location=?, conflict_event_enabled=?, conflict_event_name=?, food_split_ratio=?, food_buffer_factor=?, contribution_link=?, contribution_match_ratio=?, light_walk_by=?, light_fireworks_after=?, light_notes=?, lat=?, lon=?, setup_duration_mins=?, slider_time_start=?, slider_time_end=?, updated_at=datetime("now") WHERE id=?'
+    ).bind(body.name, body.date, body.meeting_location ?? '', body.event_location ?? '', body.conflict_event_enabled ? 1 : 0, body.conflict_event_name ?? '', body.food_split_ratio ?? 0.6, body.food_buffer_factor ?? 1.1, body.contribution_link ?? null, body.contribution_match_ratio ?? 0, body.light_walk_by ?? '', body.light_fireworks_after ?? '', body.light_notes ?? '', body.lat ?? null, body.lon ?? null, setupDuration, sliderStart, sliderEnd, c.req.param('id')).run()
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    // Surface the real D1 error so missing-column / unapplied-migration failures
+    // are visible rather than swallowed as a bare 500.
+    return c.json({ error: 'Database error', detail: msg }, 500)
+  }
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(c.req.param('id')).first()
   return c.json(mapEvent(event as Record<string, unknown>))
 }))

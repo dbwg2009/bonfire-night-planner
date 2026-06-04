@@ -1,0 +1,10 @@
+# Copy this file to .dev.vars and fill in real values for local Wrangler dev.
+# .dev.vars is gitignored — never commit it.
+# In production, set these in the Cloudflare Pages dashboard:
+#   Pages project → Settings → Environment variables
+
+# Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+JWT_SECRET=change-this-to-a-long-random-string
+
+# Free key from: https://www.metoffice.gov.uk/services/data/datapoint
+MET_OFFICE_API_KEY=your-met-office-api-key-here

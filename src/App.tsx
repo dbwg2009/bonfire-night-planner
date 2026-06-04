@@ -17,6 +17,7 @@ import Finance from './pages/admin/Finance'
 import Locations from './pages/admin/Locations'
 import ConflictEvent from './pages/admin/ConflictEvent'
 import Settings from './pages/admin/Settings'
+import Milestones from './pages/admin/Milestones'
 import More from './pages/admin/More'
 import GuestDashboard from './pages/guest/GuestDashboard'
 import RsvpForm from './pages/guest/RsvpForm'
@@ -74,6 +75,7 @@ export default function App() {
             <Route path="locations" element={<Locations />} />
             <Route path="conflict-event" element={<ConflictEvent />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="milestones" element={<Milestones />} />
             <Route path="more" element={<More />} />
           </Route>
 

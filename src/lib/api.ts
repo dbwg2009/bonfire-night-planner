@@ -24,13 +24,6 @@ function handleUnauthorised() {
   window.location.href = '/login'
 }
 
-function handleUnauthorised() {
-  localStorage.removeItem('bonfire_token')
-  localStorage.removeItem('bonfire-auth')
-  localStorage.removeItem('bonfire-event')
-  window.location.href = '/login'
-}
-
 async function request<T>(
   path: string,
   options: RequestInit = {},

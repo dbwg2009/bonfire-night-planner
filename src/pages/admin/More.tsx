@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { CreditCard, MapPin, Flame, Settings, ChevronRight, LogOut, ListTodo, History, Plus } from 'lucide-react'
+import { CreditCard, MapPin, Flame, Settings, ChevronRight, LogOut, ListTodo, History, Plus, Trophy } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Card } from '../../components/ui/card'
 import { PageHeader, PageContent } from '../../components/Layout'
@@ -48,6 +48,15 @@ export default function More() {
       to: '/admin/finance',
       color: 'text-blue-400',
       bg: 'bg-blue-400/10',
+      show: canFinance
+    },
+    {
+      label: 'Milestones',
+      desc: 'Fundraising targets and rewards for guests',
+      icon: Trophy,
+      to: '/admin/milestones',
+      color: 'text-fire-400',
+      bg: 'bg-fire-400/10',
       show: canFinance
     },
     {

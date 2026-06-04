@@ -1,0 +1,347 @@
+import { useState, useRef, useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Plus, Pencil, Trash2, Download, Star, StarOff } from 'lucide-react'
+import { Button } from '../../components/ui/button'
+import { Input } from '../../components/ui/input'
+import { Switch } from '../../components/ui/switch'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../../components/ui/dialog'
+import { MilestoneBar, getMilestoneIcon } from '../../components/MilestoneBar'
+import { PRESET_ICONS } from '../../lib/milestoneConstants'
+import { PageHeader, PageContent } from '../../components/Layout'
+import { useEventStore } from '../../store/event'
+import { api } from '../../lib/api'
+import { generateId } from '../../lib/utils'
+import { toast } from '../../components/ui/toast'
+import { cn } from '../../lib/utils'
+import type { Milestone, MilestonesResponse } from '../../lib/types'
+
+const MAX_IMAGE_PX = 128
+
+type IconTab = 'emoji' | 'preset' | 'image'
+
+const EMOJI_SUGGESTIONS = [
+  '🔥','🎆','🎇','🌭','🍔','🍺','🎵','🪵','☕','🍫',
+  '⭐','💥','🎉','🌙','🍡','🏮','🏆','🥁','🎸','✨',
+  '🍕','🧁','🎪','🎠','🌟','🪄','🧨','🎭','🥂','🍾',
+]
+
+function defaultForm() {
+  return { name: '', description: '', amountGbp: '', emoji: '🔥', icon_preset: '', icon_image: '', important: true }
+}
+
+export default function Milestones() {
+  const event = useEventStore(s => s.currentEvent)
+  const qc = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState<Milestone | null>(null)
+  const [iconTab, setIconTab] = useState<IconTab>('emoji')
+  const [form, setForm] = useState(defaultForm())
+  const [emojiInput, setEmojiInput] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const eventId = event?.id ?? ''
+
+  const { data, isLoading } = useQuery<MilestonesResponse>({
+    queryKey: ['milestones', eventId],
+    queryFn: () => api.getMilestones(eventId) as Promise<MilestonesResponse>,
+    enabled: !!eventId
+  })
+
+  const milestones = data?.milestones ?? []
+  const totalRaised = data?.total_raised ?? 0
+  const sorted = [...milestones].sort((a, b) => a.amount - b.amount)
+
+  const save = useMutation({
+    mutationFn: async (f: typeof form) => {
+      const payload = {
+        id: editing?.id ?? generateId(),
+        name: f.name,
+        description: f.description,
+        amount: Math.round(parseFloat(f.amountGbp) * 100),
+        emoji: iconTab === 'emoji' ? f.emoji : '',
+        icon_preset: iconTab === 'preset' ? f.icon_preset : '',
+        icon_image: iconTab === 'image' ? f.icon_image : '',
+        important: f.important
+      }
+      if (editing) return api.updateMilestone(eventId, editing.id, payload)
+      return api.createMilestone(eventId, payload)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['milestones', eventId] })
+      setOpen(false)
+      toast(editing ? 'Milestone updated' : 'Milestone added')
+    },
+    onError: () => toast('Failed to save', 'error')
+  })
+
+  const remove = useMutation({
+    mutationFn: (id: string) => api.deleteMilestone(eventId, id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['milestones', eventId] }); toast('Removed') }
+  })
+
+  function openAdd() {
+    setEditing(null)
+    setForm(defaultForm())
+    setIconTab('emoji')
+    setEmojiInput('')
+    setOpen(true)
+  }
+
+  function openEdit(m: Milestone) {
+    setEditing(m)
+    const tab: IconTab = m.icon_image ? 'image' : m.icon_preset ? 'preset' : 'emoji'
+    setIconTab(tab)
+    setForm({
+      name: m.name, description: m.description,
+      amountGbp: (m.amount / 100).toFixed(2),
+      emoji: m.emoji || '🔥', icon_preset: m.icon_preset || '',
+      icon_image: m.icon_image || '', important: m.important
+    })
+    setEmojiInput(m.emoji || '')
+    setOpen(true)
+  }
+
+  const handleImageUpload = useCallback((file: File) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const scale = Math.min(MAX_IMAGE_PX / img.width, MAX_IMAGE_PX / img.height, 1)
+        canvas.width = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+        setForm(f => ({ ...f, icon_image: canvas.toDataURL('image/png') }))
+      }
+      img.src = e.target?.result as string
+    }
+    reader.readAsDataURL(file)
+  }, [])
+
+  async function exportPng() {
+    if (sorted.length === 0) return
+    const maxAmount = sorted[sorted.length - 1].amount
+    const W = 800, H = 160, PAD = 24
+    const canvas = document.createElement('canvas')
+    canvas.width = W; canvas.height = H
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = '#0a0500'; ctx.fillRect(0, 0, W, H)
+    ctx.fillStyle = '#f97316'; ctx.font = 'bold 18px system-ui, sans-serif'
+    ctx.fillText(`£${(totalRaised / 100).toFixed(0)} raised`, PAD, 28)
+    ctx.fillStyle = '#6b5f54'; ctx.font = '13px system-ui, sans-serif'
+    ctx.fillText(`of £${(maxAmount / 100).toFixed(0)}`, PAD + 130, 28)
+    const barY = H / 2 + 10, barH = 10, barX = PAD, barW = W - PAD * 2
+    ctx.fillStyle = '#ffffff18'
+    roundRect(ctx, barX, barY, barW, barH, 5); ctx.fill()
+    const fillW = Math.min(barW, Math.max(0, (totalRaised / maxAmount) * barW))
+    const grad = ctx.createLinearGradient(barX, 0, barX + barW, 0)
+    grad.addColorStop(0, '#e85f00'); grad.addColorStop(1, '#fbbf24')
+    ctx.fillStyle = grad; roundRect(ctx, barX, barY, fillW, barH, 5); ctx.fill()
+    ctx.font = '20px system-ui, sans-serif'
+    for (const m of sorted) {
+      const x = barX + (m.amount / maxAmount) * barW
+      ctx.globalAlpha = totalRaised >= m.amount ? 1 : 0.35
+      ctx.fillStyle = '#ffffff'
+      ctx.fillText(getMilestoneIcon(m), x - 12, barY - 10)
+    }
+    ctx.globalAlpha = 1
+    const a = document.createElement('a')
+    a.download = 'bonfire-milestones.png'; a.href = canvas.toDataURL('image/png'); a.click()
+  }
+
+  return (
+    <div className="animate-fade-in">
+      <PageHeader
+        title="Milestones"
+        subtitle="Fundraising rewards"
+        action={
+          <div className="flex gap-2">
+            {sorted.length > 0 && (
+              <Button size="icon" variant="outline" onClick={exportPng} title="Export PNG">
+                <Download size={16} />
+              </Button>
+            )}
+            <Button size="icon" onClick={openAdd}>
+              <Plus size={18} />
+            </Button>
+          </div>
+        }
+      />
+
+      <PageContent>
+        {isLoading ? null : sorted.length === 0 ? (
+          <div className="glass-card p-8 text-center">
+            <p className="text-3xl mb-3">🎯</p>
+            <p className="text-sm font-semibold text-smoke-200 mb-1">No milestones yet</p>
+            <p className="text-xs text-smoke-500 mb-4">Set fundraising targets that unlock rewards for guests.</p>
+            <Button size="sm" onClick={openAdd}><Plus size={14} /> Add first milestone</Button>
+          </div>
+        ) : (
+          <>
+            {/* Live preview */}
+            <div className="glass-card p-4">
+              <p className="text-[10px] text-smoke-500 mb-3 uppercase tracking-wider font-semibold">Live preview</p>
+              <MilestoneBar milestones={milestones} totalRaisedPence={totalRaised} compact />
+            </div>
+
+            {/* 2-column milestone grid */}
+            <div className="grid grid-cols-2 gap-3">
+              {sorted.map(m => {
+                const unlocked = totalRaised >= m.amount
+                const icon = getMilestoneIcon(m)
+                const hasImage = !!m.icon_image
+                return (
+                  <div
+                    key={m.id}
+                    className={cn('glass-card p-4 flex flex-col gap-3 transition-all', unlocked && 'border-fire-400/20 bg-fire-500/5')}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div
+                        className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl border"
+                        style={{
+                          background: unlocked ? 'linear-gradient(135deg, #e85f00, #fbbf24)' : 'rgba(255,255,255,0.05)',
+                          borderColor: unlocked ? 'rgba(232,95,0,0.4)' : 'rgba(255,255,255,0.08)'
+                        }}
+                      >
+                        {hasImage ? (
+                          <img src={m.icon_image} alt={m.name} className="w-10 h-10 rounded-lg object-cover" />
+                        ) : (
+                          <span className={cn('leading-none', !unlocked && 'grayscale opacity-60')}>{icon}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-0.5">
+                        {m.important ? <Star size={12} className="text-fire-400" /> : <StarOff size={12} className="text-smoke-600" />}
+                        {unlocked && <span className="text-[10px] text-emerald-400 ml-1">✓</span>}
+                      </div>
+                    </div>
+
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-smoke-100 leading-tight">{m.name}</p>
+                      <p className={cn('text-xs font-bold mt-0.5', unlocked ? 'text-fire-300' : 'text-smoke-500')}>
+                        £{(m.amount / 100).toFixed(0)}
+                      </p>
+                      {m.description && (
+                        <p className="text-xs text-smoke-500 mt-1 leading-relaxed line-clamp-2">{m.description}</p>
+                      )}
+                    </div>
+
+                    <div className="flex gap-1 pt-1 border-t border-white/5">
+                      <button
+                        onClick={() => openEdit(m)}
+                        className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs text-smoke-400 hover:text-smoke-200 tap-highlight-none transition-colors"
+                      >
+                        <Pencil size={12} /> Edit
+                      </button>
+                      <div className="w-px bg-white/5" />
+                      <button
+                        onClick={() => { if (confirm(`Remove "${m.name}"?`)) remove.mutate(m.id) }}
+                        className="flex-1 flex items-center justify-center gap-1 py-1.5 text-xs text-smoke-400 hover:text-red-400 tap-highlight-none transition-colors"
+                      >
+                        <Trash2 size={12} /> Remove
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+      </PageContent>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? 'Edit Milestone' : 'Add Milestone'}</DialogTitle>
+            <DialogDescription>Set a fundraising target and reward icon.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-smoke-400 mb-1 block">Name *</label>
+              <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Better fireworks" />
+            </div>
+            <div>
+              <label className="text-xs text-smoke-400 mb-1 block">Description</label>
+              <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Upgraded display with bigger bursts" />
+            </div>
+            <div>
+              <label className="text-xs text-smoke-400 mb-1 block">Target amount (£) *</label>
+              <Input type="number" min="1" step="1" value={form.amountGbp} onChange={e => setForm(f => ({ ...f, amountGbp: e.target.value }))} placeholder="100" />
+              <p className="text-[11px] text-smoke-500 mt-1">Cumulative total raised needed to unlock this milestone</p>
+            </div>
+
+            <div>
+              <label className="text-xs text-smoke-400 mb-2 block">Icon</label>
+              <div className="flex gap-1 mb-3">
+                {(['emoji', 'preset', 'image'] as IconTab[]).map(t => (
+                  <button key={t} onClick={() => setIconTab(t)} className={cn('flex-1 py-1.5 text-xs rounded-lg border transition-all tap-highlight-none capitalize', iconTab === t ? 'bg-fire-500/15 text-fire-300 border-fire-400/30' : 'glass border-white/10 text-smoke-400')}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+
+              {iconTab === 'emoji' && (
+                <div className="space-y-2">
+                  <Input value={emojiInput} onChange={e => { setEmojiInput(e.target.value); setForm(f => ({ ...f, emoji: e.target.value })) }} placeholder="Type or paste any emoji" className="text-lg" />
+                  <div className="flex flex-wrap gap-1.5">
+                    {EMOJI_SUGGESTIONS.map(e => (
+                      <button key={e} onClick={() => { setForm(f => ({ ...f, emoji: e })); setEmojiInput(e) }} className={cn('w-9 h-9 text-lg rounded-lg border tap-highlight-none transition-all', form.emoji === e ? 'bg-fire-500/15 border-fire-400/30' : 'glass border-white/10 hover:border-white/20')}>{e}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {iconTab === 'preset' && (
+                <div className="grid grid-cols-5 gap-1.5">
+                  {Object.entries(PRESET_ICONS).map(([key, icon]) => (
+                    <button key={key} onClick={() => setForm(f => ({ ...f, icon_preset: key }))} className={cn('flex flex-col items-center gap-0.5 p-2 rounded-xl border text-xs tap-highlight-none transition-all', form.icon_preset === key ? 'bg-fire-500/15 border-fire-400/30' : 'glass border-white/10 hover:border-white/20')} title={key}>
+                      <span className="text-lg">{icon}</span>
+                      <span className="text-[9px] text-smoke-500 capitalize">{key}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {iconTab === 'image' && (
+                <div className="space-y-2">
+                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0])} />
+                  <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>Choose image</Button>
+                  {form.icon_image && (
+                    <div className="flex items-center gap-3">
+                      <img src={form.icon_image} alt="Preview" className="w-12 h-12 rounded-xl object-cover border border-white/10" />
+                      <button onClick={() => setForm(f => ({ ...f, icon_image: '' }))} className="text-xs text-red-400 hover:text-red-300 tap-highlight-none">Remove</button>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-smoke-500">Images are compressed to 128×128px.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <div>
+                <p className="text-sm text-smoke-200">Show on compact bar</p>
+                <p className="text-[11px] text-smoke-500">When the bar can't fit all milestones, only starred ones are shown</p>
+              </div>
+              <Switch checked={form.important} onCheckedChange={v => setForm(f => ({ ...f, important: v }))} />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button onClick={() => save.mutate(form)} disabled={!form.name.trim() || !form.amountGbp || save.isPending}>
+              {save.isPending ? 'Saving…' : editing ? 'Save changes' : 'Add Milestone'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r)
+  ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
+  ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r)
+  ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath()
+}

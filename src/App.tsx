@@ -19,6 +19,7 @@ import ConflictEvent from './pages/admin/ConflictEvent'
 import Settings from './pages/admin/Settings'
 import Milestones from './pages/admin/Milestones'
 import Pickup from './pages/admin/Pickup'
+import LightLevels from './pages/admin/LightLevels'
 import More from './pages/admin/More'
 import GuestDashboard from './pages/guest/GuestDashboard'
 import RsvpForm from './pages/guest/RsvpForm'
@@ -85,6 +86,7 @@ export default function App() {
             <Route path="settings" element={<Settings />} />
             <Route path="milestones" element={<FinanceGuard><Milestones /></FinanceGuard>} />
             <Route path="pickup" element={<Pickup />} />
+            <Route path="light-levels" element={<LightLevels />} />
             <Route path="more" element={<More />} />
           </Route>
 

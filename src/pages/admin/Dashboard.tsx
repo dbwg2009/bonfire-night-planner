@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import {
   Users, UtensilsCrossed, ListTodo, CreditCard, MapPin,
-  CheckSquare, Calendar, Settings, LogOut, ChevronRight, Car, Trophy, CheckCheck
+  CheckSquare, Calendar, Settings, LogOut, ChevronRight, Car, Trophy, CheckCheck, Circle, Clock3
 } from 'lucide-react'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -12,7 +12,7 @@ import { PageContent } from '../../components/Layout'
 import { useAuthStore } from '../../store/auth'
 import { useEventStore } from '../../store/event'
 import { api } from '../../lib/api'
-import { getBonfireDate, timeAgo } from '../../lib/utils'
+import { getBonfireDate, timeAgo, formatDate } from '../../lib/utils'
 import type { Guest, Task, MilestonesResponse } from '../../lib/types'
 
 const NOTIF_ICONS: Record<string, string> = {
@@ -74,6 +74,16 @@ export default function Dashboard() {
   const pending = guests.filter(g => g.rsvp_status === 'invited').length
   const completedTasks = tasks.filter(t => t.status === 'completed').length
   const totalTasks = tasks.length
+
+  const upcomingTasks = tasks
+    .filter(t => t.status !== 'completed')
+    .sort((a, b) => {
+      if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date)
+      if (a.due_date) return -1
+      if (b.due_date) return 1
+      return 0
+    })
+    .slice(0, 2)
 
   const slotsMeta = pickupSlots.length === 0 ? 'No slots yet' : `${pickupSlots.length} slot${pickupSlots.length !== 1 ? 's' : ''}`
   const milestonesMeta = milestonesData && milestonesData.total_raised > 0
@@ -200,6 +210,23 @@ export default function Dashboard() {
                 {completedTasks}/{totalTasks}
               </span>
             </div>
+            {upcomingTasks.length > 0 && (
+              <div className="mt-3 space-y-2 border-t border-white/[0.04] pt-3">
+                {upcomingTasks.map(task => {
+                  const Icon = task.status === 'in_progress' ? Clock3 : Circle
+                  const iconColor = task.status === 'in_progress' ? 'text-amber-400' : 'text-smoke-600'
+                  return (
+                    <div key={task.id} className="flex items-center gap-2">
+                      <Icon size={14} className={`${iconColor} shrink-0`} />
+                      <p className="text-sm text-smoke-200 flex-1 min-w-0 truncate">{task.title}</p>
+                      {task.due_date && (
+                        <span className="text-[11px] text-smoke-500 shrink-0">{formatDate(task.due_date, 'dd MMM')}</span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </Card>
         )}
 

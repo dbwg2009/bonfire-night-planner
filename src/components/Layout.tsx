@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom'
 import { FireBackground } from './FireBackground'
 import { BottomNav } from './BottomNav'
+import { NotificationBell } from './NotificationBell'
 import { Toaster } from './ui/toast'
 import { cn } from '../lib/utils'
 
@@ -12,6 +13,11 @@ export function Layout({ showNav = true }: LayoutProps) {
   return (
     <div className="relative min-h-dvh min-h-screen flex flex-col">
       <FireBackground />
+      {showNav && (
+        <div className="fixed top-0 right-0 z-50 safe-top pr-3 pt-1">
+          <NotificationBell />
+        </div>
+      )}
       <div className={cn('relative z-10 flex flex-col flex-1 safe-top', showNav && 'pb-[calc(80px+env(safe-area-inset-bottom,0px))]')}>
         <Outlet />
       </div>

@@ -1,19 +1,31 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Calendar, MapPin, Clock, AlertCircle, Loader2 } from 'lucide-react'
+import { Calendar, MapPin, Clock, AlertCircle, Loader2, UtensilsCrossed, Phone } from 'lucide-react'
 import { Card } from '../../components/ui/card'
+import { Button } from '../../components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog'
 import { Countdown } from '../../components/Countdown'
 import { WeatherWidget } from '../../components/WeatherWidget'
 import { FireBackground } from '../../components/FireBackground'
 import { MilestoneBar } from '../../components/MilestoneBar'
 import { Toaster } from '../../components/ui/toast'
+import { toast } from '../../components/ui/toast'
 import { formatDate, formatTime, getBonfireDate } from '../../lib/utils'
+import { api } from '../../lib/api'
 import type { Event, Guest, MilestonesResponse } from '../../lib/types'
 
-type PublicGuest = Pick<Guest, 'id' | 'name' | 'rsvp_status' | 'dietary' | 'pickup_time'>
+type PublicGuest = Pick<Guest, 'id' | 'name' | 'rsvp_status' | 'dietary' | 'pickup_time'> & {
+  dietary_restrictions: string[]
+  dietary_notes: string
+  emergency_contact: string
+}
 
 function hasRsvpCookie() {
   return document.cookie.split(';').some(c => c.trim().startsWith('rsvp_submitted='))
+}
+
+function getStoredGuestId(): string | null {
+  try { return localStorage.getItem('rsvp_guest_id') } catch { return null }
 }
 
 export default function GuestDashboard() {
@@ -22,10 +34,12 @@ export default function GuestDashboard() {
   const [alreadyRsvpd] = useState(() => hasRsvpCookie())
   const [milestones, setMilestones] = useState<MilestonesResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const navigate = useNavigate()
 
-  // Guest ID from URL param — share links like /?guest=GUEST_ID
-  const guestId = new URLSearchParams(window.location.search).get('guest')
+  const urlGuestId = new URLSearchParams(window.location.search).get('guest')
+  const guestId = urlGuestId ?? getStoredGuestId()
 
   useEffect(() => {
     async function load() {
@@ -57,6 +71,22 @@ export default function GuestDashboard() {
     }
     load()
   }, [guestId])
+
+  async function handleCancel() {
+    if (!event?.id || !myGuest) return
+    setCancelling(true)
+    try {
+      const res = await api.cancelRsvp(event.id, myGuest.id)
+      if (res.error) { toast(res.error, 'error'); return }
+      setMyGuest(g => g ? { ...g, rsvp_status: 'declined' } : g)
+      setCancelOpen(false)
+      toast('RSVP cancelled — sorry you can\'t make it!', 'success')
+    } catch {
+      toast('Failed to cancel — please try again', 'error')
+    } finally {
+      setCancelling(false)
+    }
+  }
 
   const year = event?.year ?? new Date().getFullYear()
   const bonfireDate = event ? new Date(event.date) : getBonfireDate(year)
@@ -105,24 +135,87 @@ export default function GuestDashboard() {
             </Card>
           )}
 
-          {/* Personal RSVP status */}
+          {/* Personal RSVP summary */}
           {myGuest && (
             <Card className={
               myGuest.rsvp_status === 'accepted' ? 'border-emerald-400/25 bg-emerald-500/5'
               : myGuest.rsvp_status === 'declined' ? 'border-red-400/25 bg-red-500/5' : ''
             }>
-              <h2 className="text-sm font-semibold text-smoke-300 mb-2">Your RSVP — {myGuest.name}</h2>
-              <span className={`text-sm font-medium px-2.5 py-1 rounded-full border inline-block ${
-                myGuest.rsvp_status === 'accepted' ? 'text-emerald-400 border-emerald-400/25 bg-emerald-500/10'
-                : myGuest.rsvp_status === 'declined' ? 'text-red-400 border-red-400/25 bg-red-500/10'
-                : 'text-amber-400 border-amber-400/25 bg-amber-500/10'
-              }`}>
-                {myGuest.rsvp_status === 'accepted' ? '✅ Coming!' : myGuest.rsvp_status === 'declined' ? "❌ Can't make it" : '⏳ Pending'}
-              </span>
+              <div className="flex items-start justify-between mb-3">
+                <h2 className="text-sm font-semibold text-smoke-300">Your RSVP — {myGuest.name}</h2>
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full border shrink-0 ml-2 ${
+                  myGuest.rsvp_status === 'accepted' ? 'text-emerald-400 border-emerald-400/25 bg-emerald-500/10'
+                  : myGuest.rsvp_status === 'declined' ? 'text-red-400 border-red-400/25 bg-red-500/10'
+                  : 'text-amber-400 border-amber-400/25 bg-amber-500/10'
+                }`}>
+                  {myGuest.rsvp_status === 'accepted' ? '✅ Coming!' : myGuest.rsvp_status === 'declined' ? "❌ Can't make it" : '⏳ Pending'}
+                </span>
+              </div>
+
+              <div className="space-y-2.5">
+                {myGuest.rsvp_status === 'accepted' && myGuest.dietary && (myGuest.dietary as string[]).length > 0 && (
+                  <div className="flex items-start gap-2">
+                    <UtensilsCrossed size={13} className="text-fire-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs text-smoke-500">Food</p>
+                      <p className="text-sm text-smoke-200 capitalize">{(myGuest.dietary as string[]).join(', ')}</p>
+                    </div>
+                  </div>
+                )}
+
+                {myGuest.dietary_restrictions?.length > 0 && (
+                  <div className="flex items-start gap-2">
+                    <AlertCircle size={13} className="text-amber-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs text-smoke-500">Dietary restrictions</p>
+                      <p className="text-sm text-smoke-200">{myGuest.dietary_restrictions.map(r => r.replace(/_/g, ' ')).join(', ')}</p>
+                    </div>
+                  </div>
+                )}
+
+                {myGuest.dietary_notes && (
+                  <div className="flex items-start gap-2">
+                    <AlertCircle size={13} className="text-amber-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs text-smoke-500">Dietary notes</p>
+                      <p className="text-sm text-smoke-200">{myGuest.dietary_notes}</p>
+                    </div>
+                  </div>
+                )}
+
+                {myGuest.pickup_time && myGuest.rsvp_status === 'accepted' && (
+                  <div className="flex items-start gap-2">
+                    <Clock size={13} className="text-fire-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs text-smoke-500">Pick-up preference</p>
+                      <p className="text-sm text-smoke-200">{myGuest.pickup_time}</p>
+                    </div>
+                  </div>
+                )}
+
+                {myGuest.emergency_contact && (
+                  <div className="flex items-start gap-2">
+                    <Phone size={13} className="text-smoke-500 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs text-smoke-500">Emergency contact</p>
+                      <p className="text-sm text-smoke-200">{myGuest.emergency_contact}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {myGuest.rsvp_status === 'accepted' && (
+                <button
+                  onClick={() => setCancelOpen(true)}
+                  className="mt-4 w-full text-xs text-red-400/70 hover:text-red-400 transition-colors text-center py-1.5 border border-red-400/10 hover:border-red-400/25 rounded-lg tap-highlight-none"
+                >
+                  Can no longer go
+                </button>
+              )}
             </Card>
           )}
 
-          {/* Pick-up time */}
+          {/* Pick-up time highlight (standalone, only if accepted) */}
           {myGuest?.pickup_time && myGuest.rsvp_status === 'accepted' && (
             <Card>
               <div className="flex items-center gap-2 mb-1">
@@ -196,6 +289,24 @@ export default function GuestDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Cancel confirm dialog */}
+      <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Can no longer go?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-smoke-400 leading-relaxed">
+            This will cancel your RSVP and let the organiser know. Are you sure?
+          </p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setCancelOpen(false)}>Keep my RSVP</Button>
+            <Button variant="destructive" onClick={handleCancel} disabled={cancelling}>
+              {cancelling ? 'Cancelling…' : 'Yes, cancel my RSVP'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

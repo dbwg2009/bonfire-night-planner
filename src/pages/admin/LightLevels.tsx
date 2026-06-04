@@ -16,6 +16,7 @@ import type { ScheduleItem, Event, Location } from '../../lib/types'
 
 const DEFAULT_LAT = 51.822
 const DEFAULT_LON = -3.016
+const FIREWORKS_MAX_LIGHT = 6  // light % at/below which "ideal for fireworks" shows
 
 const PRESET_EVENTS = [
   { title: 'Leaving meeting location', activity_type: 'Transportation' },
@@ -25,7 +26,7 @@ const PRESET_EVENTS = [
   { title: 'Lighting fireworks',       activity_type: 'Fireworks'      },
 ] as const
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Time helpers ───────────────────────────────────────────────────────────────
 
 function parseLocalDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number)
@@ -38,9 +39,8 @@ function timeToMinutes(t: string): number {
 }
 
 function minutesToTime(mins: number): string {
-  const h = Math.floor(Math.max(0, Math.min(1439, mins)) / 60)
-  const m = Math.max(0, Math.min(1439, mins)) % 60
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  const v = Math.max(0, Math.min(1439, Math.round(mins)))
+  return `${String(Math.floor(v / 60)).padStart(2, '0')}:${String(v % 60).padStart(2, '0')}`
 }
 
 function getSunAltDeg(minutes: number, date: Date, lat: number, lon: number): number {
@@ -49,72 +49,109 @@ function getSunAltDeg(minutes: number, date: Date, lat: number, lon: number): nu
   return (SunCalc.getPosition(d, lat, lon).altitude * 180) / Math.PI
 }
 
+// ─── Light / colour helpers ─────────────────────────────────────────────────────
+
+// Perceptual brightness 0–100 from sun altitude. Anchored so that below the
+// horizon reads low: sunset(0°)≈60, civil dusk(−6°)≈25, nautical(−12°)≈6, astro(−18°)=0.
 function lightPctFromAlt(altDeg: number): number {
-  return Math.round(Math.max(0, Math.min(100, ((altDeg + 18) / 24) * 100)))
+  const stops: [number, number][] = [[6, 100], [0, 60], [-6, 25], [-12, 6], [-18, 0]]
+  if (altDeg >= stops[0][0]) return 100
+  if (altDeg <= stops[stops.length - 1][0]) return 0
+  for (let i = 0; i < stops.length - 1; i++) {
+    const [a1, p1] = stops[i]
+    const [a2, p2] = stops[i + 1]
+    if (altDeg <= a1 && altDeg >= a2) {
+      const t = (altDeg - a2) / (a1 - a2)
+      return Math.round(p2 + t * (p1 - p2))
+    }
+  }
+  return 0
+}
+
+function isFireworksIdeal(altDeg: number): boolean {
+  return lightPctFromAlt(altDeg) <= FIREWORKS_MAX_LIGHT
 }
 
 function sunEmberColor(altDeg: number): string {
-  // Fire/smoke theme: sun is a fireball cooling to embers
-  if (altDeg > 30)  return '#ffe060'  // white-hot yellow
-  if (altDeg > 15)  return '#ffb030'  // bright amber
-  if (altDeg > 3)   return '#ff7010'  // hot orange
-  if (altDeg > 0)   return '#ff4800'  // sunset orange-red
-  if (altDeg > -6)  return '#cc2800'  // ember red just below horizon
-  if (altDeg > -15) return '#882000'  // deep ember
-  return '#441000'                    // nearly dead coal
+  // Fireball at altitude → cooling ember below the horizon
+  if (altDeg > 30)  return '#ffd84d'
+  if (altDeg > 15)  return '#ffae33'
+  if (altDeg > 4)   return '#ff7a1a'
+  if (altDeg > 0)   return '#ff5500'
+  if (altDeg > -6)  return '#e23a00'
+  if (altDeg > -12) return '#a82400'
+  return '#5e1500'
 }
 
 function sunRadius(altDeg: number): number {
-  if (altDeg > 10) return 13
-  if (altDeg > 0)  return 11
+  if (altDeg > 10) return 12
+  if (altDeg > 0)  return 10.5
   if (altDeg > -8) return 9
-  return 7
+  return 7.5
 }
 
-function phaseLabel(altDeg: number): string {
+function phaseEmoji(altDeg: number): string {
   const pct = lightPctFromAlt(altDeg)
   if (pct >= 60) return '☀️'
   if (pct >= 30) return '🌤'
-  if (pct >= 15) return '🌅'
-  if (pct > 0)   return '🌙'
+  if (pct >= 12) return '🌇'
+  if (pct > 0)   return '🌆'
   return '🌑'
 }
 
-// Smoke-dark background with ember glow based on sun position
+// Subtle dark base; the warm glow comes from the SVG sun so it always tracks it.
 function skyPanelStyle(altDeg: number): React.CSSProperties {
   const pct = lightPctFromAlt(altDeg)
-  if (pct >= 60) return { background: 'radial-gradient(ellipse at 65% 35%, rgba(140,80,0,0.35) 0%, #0d0d0d 65%)' }
-  if (pct >= 35) return { background: 'radial-gradient(ellipse at 68% 40%, rgba(180,70,0,0.45) 0%, #0a0a0a 60%)' }
-  if (pct >= 15) return { background: 'radial-gradient(ellipse at 70% 55%, rgba(140,30,0,0.35) 0%, #080808 65%)' }
-  if (pct >= 5)  return { background: 'radial-gradient(ellipse at 72% 65%, rgba(90,15,0,0.3) 0%, #060606 60%)' }
-  return { background: 'radial-gradient(ellipse at 73% 72%, rgba(50,8,0,0.2) 0%, #040404 55%)' }
+  if (pct >= 50) return { background: 'linear-gradient(180deg, #1c1408 0%, #0c0a07 100%)' }
+  if (pct >= 20) return { background: 'linear-gradient(180deg, #170f08 0%, #0a0806 100%)' }
+  if (pct >= 5)  return { background: 'linear-gradient(180deg, #110b0b 0%, #070607 100%)' }
+  return { background: 'linear-gradient(180deg, #0b0810 0%, #050406 100%)' }
 }
 
-// ─── Arc ──────────────────────────────────────────────────────────────────────
+// ─── Arc geometry ────────────────────────────────────────────────────────────────
 
-interface ArcData { path: string; belowPath: string; W: number; H: number; horizonY: number }
+interface ArcData {
+  abovePath: string
+  belowPath: string
+  W: number
+  H: number
+  horizonY: number
+  altToY: (alt: number) => number
+}
 
 function buildArc(date: Date, lat: number, lon: number): ArcData {
-  const W = 360; const H = 160; const horizonY = 100
-  const MAX_ALT = 35; const steps = 96
+  const W = 360, H = 150, horizonY = 66
+  const steps = 96
 
-  const pts = Array.from({ length: steps + 1 }, (_, i) => {
+  // Day's max altitude (solar noon) drives the vertical scale so the hump always
+  // fills the space nicely — even in winter when the noon sun is low.
+  const noon = SunCalc.getTimes(date, lat, lon).solarNoon
+  const noonAlt = noon instanceof Date && !isNaN(noon.getTime())
+    ? getSunAltDeg(noon.getHours() * 60 + noon.getMinutes(), date, lat, lon)
+    : 30
+  const maxAlt = Math.max(noonAlt, 8)
+  const BELOW_REF = 18 // map −18° (astronomical dark) to near the bottom
+  const scaleAbove = (horizonY - 12) / maxAlt
+  const scaleBelow = (H - horizonY - 12) / BELOW_REF
+
+  const altToY = (alt: number): number => {
+    const y = alt >= 0
+      ? horizonY - alt * scaleAbove
+      : horizonY + Math.min(BELOW_REF, -alt) * scaleBelow
+    return Math.max(6, Math.min(H - 6, y))
+  }
+
+  let aboveD = '', belowD = ''
+  for (let i = 0; i <= steps; i++) {
     const mins = (i / steps) * 1440
     const alt = getSunAltDeg(mins, date, lat, lon)
     const x = (i / steps) * W
-    const y = horizonY - Math.max(-30, Math.min(MAX_ALT, alt)) * ((horizonY - 10) / MAX_ALT)
-    return { x, y, above: alt >= 0 }
-  })
+    const y = altToY(alt)
+    if (alt >= 0) aboveD += `${aboveD ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)} `
+    else          belowD += `${belowD ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)} `
+  }
 
-  // Build two paths: above-horizon (brighter) and below-horizon (dimmer)
-  let aboveD = '', belowD = ''
-  pts.forEach((p, i) => {
-    const cmd = i === 0 ? 'M' : 'L'
-    if (p.above) aboveD += `${cmd}${p.x.toFixed(1)},${p.y.toFixed(1)} `
-    else belowD += `${cmd}${p.x.toFixed(1)},${p.y.toFixed(1)} `
-  })
-
-  return { path: aboveD.trim(), belowPath: belowD.trim(), W, H, horizonY }
+  return { abovePath: aboveD.trim(), belowPath: belowD.trim(), W, H, horizonY, altToY }
 }
 
 // ─── Smart timing ─────────────────────────────────────────────────────────────
@@ -127,66 +164,50 @@ interface SmartTiming {
 }
 
 function computeSmartTiming(
-  eventDate: Date, lat: number, lon: number,
-  walkMins: number, setupMins: number
+  eventDate: Date, lat: number, lon: number, walkMins: number, setupMins: number
 ): SmartTiming {
   const times = SunCalc.getTimes(eventDate, lat, lon)
   const valid = (d: unknown): d is Date => d instanceof Date && !isNaN((d as Date).getTime())
 
-  // Setup deadline = halfway between civil dusk and nautical dusk
-  const civilDusk    = valid(times.dusk)        ? times.dusk        : null
+  const civilDusk    = valid(times.dusk)         ? times.dusk         : null
   const nauticalDusk = valid(times.nauticalDusk) ? times.nauticalDusk : null
-  const astDusk      = valid(times.night)        ? times.night       : null  // 18° below
+  const astDusk      = valid(times.night)        ? times.night        : null  // sun 18° below
 
+  // Setup must finish halfway into nautical twilight (between civil & nautical dusk)
   const setupDeadline = civilDusk && nauticalDusk
     ? new Date((civilDusk.getTime() + nauticalDusk.getTime()) / 2)
     : null
-
   const departBy = setupDeadline
     ? new Date(setupDeadline.getTime() - (walkMins + setupMins) * 60_000)
     : null
 
-  return {
-    departBy,
-    bonfireStart: nauticalDusk,
-    bonfireEnd:   astDusk,
-    fireworksAfter: astDusk,
-  }
+  return { departBy, bonfireStart: nauticalDusk, bonfireEnd: astDusk, fireworksAfter: astDusk }
 }
 
 function fmtDate(d: Date | null): string {
   if (!d) return '—'
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
+function dateToMinutes(d: Date | null): number | null {
+  return d ? d.getHours() * 60 + d.getMinutes() : null
+}
 
 // ─── Slider track gradient ────────────────────────────────────────────────────
 
 function buildTrackStyle(
-  sliderMin: number, sliderMax: number,
-  date: Date, lat: number, lon: number
+  sliderMin: number, sliderMax: number, date: Date, lat: number, lon: number
 ): React.CSSProperties {
-  const range = sliderMax - sliderMin
-  const stops: string[] = []
-
-  const PHASES = [
-    { pct: 100, color: '#1a3a6a' }, // day (blue-smoke)
-    { pct: 45,  color: '#7a4800' }, // golden hour
-    { pct: 25,  color: '#6a2010' }, // civil twilight
-    { pct: 10,  color: '#3a1050' }, // nautical twilight
-    { pct: 3,   color: '#1a0825' }, // astronomical
-    { pct: 0,   color: '#080410' }, // night
+  const range = Math.max(1, sliderMax - sliderMin)
+  const PHASES: [number, string][] = [
+    [100, '#2563a5'], [45, '#9a5a00'], [25, '#7a2410'], [10, '#3a1458'], [3, '#1a0a25'], [0, '#080410'],
   ]
-
-  // Sample 40 points across the slider range and pick the phase colour
+  const stops: string[] = []
   for (let i = 0; i <= 40; i++) {
     const mins = sliderMin + (i / 40) * range
-    const alt = getSunAltDeg(mins, date, lat, lon)
-    const lp = lightPctFromAlt(alt)
-    // Find phase colour
-    const phase = PHASES.find(p => lp >= p.pct) ?? PHASES[PHASES.length - 1]
-    stops.push(`${phase.color} ${((i / 40) * 100).toFixed(1)}%`)
+    const lp = lightPctFromAlt(getSunAltDeg(mins, date, lat, lon))
+    const phase = PHASES.find(p => lp >= p[0]) ?? PHASES[PHASES.length - 1]
+    stops.push(`${phase[1]} ${((i / 40) * 100).toFixed(1)}%`)
   }
-
   return { background: `linear-gradient(90deg, ${stops.join(', ')})` }
 }
 
@@ -210,9 +231,9 @@ export default function LightLevels() {
 
   const sliderMin = event?.slider_time_start ? timeToMinutes(event.slider_time_start) : 0
   const sliderMax = event?.slider_time_end   ? timeToMinutes(event.slider_time_end)   : 1439
+  const sliderRange = Math.max(1, sliderMax - sliderMin)
   const setupMins = event?.setup_duration_mins ?? 30
 
-  // SunCalc times
   const sunTimes = useMemo(() => SunCalc.getTimes(eventDate, lat, lon), [eventDate, lat, lon])
   const sunsetMinutes = useMemo(() => {
     const s = sunTimes.sunset
@@ -220,16 +241,12 @@ export default function LightLevels() {
   }, [sunTimes])
   const defaultMinutes = sunsetMinutes ?? 18 * 60
 
-  // Arc (memoised — same for all items)
   const arc = useMemo(() => buildArc(eventDate, lat, lon), [eventDate, lat, lon])
-
-  // Slider track gradient (memoised)
   const trackStyle = useMemo(
     () => buildTrackStyle(sliderMin, sliderMax, eventDate, lat, lon),
     [sliderMin, sliderMax, eventDate, lat, lon]
   )
 
-  // Queries
   const { data: items = [], isLoading } = useQuery<ScheduleItem[]>({
     queryKey: ['schedule', event?.id],
     queryFn: () => api.getSchedule(event!.id) as Promise<ScheduleItem[]>,
@@ -266,29 +283,22 @@ export default function LightLevels() {
 
   const selectedItem = items.find(i => i.id === selectedId) ?? null
 
-  // Display time for the sky panel (drag overrides item time)
   const displayMinutes: number = useMemo(() => {
     if (selectedItem) {
       return dragTime ?? (selectedItem.start_time ? timeToMinutes(selectedItem.start_time) : defaultMinutes)
     }
-    // No selection: show current real time
     const now = new Date()
     return now.getHours() * 60 + now.getMinutes()
   }, [selectedItem, dragTime, defaultMinutes])
 
   const displayAlt = getSunAltDeg(displayMinutes, eventDate, lat, lon)
   const displayLight = lightPctFromAlt(displayAlt)
-  const isIdealFireworks = displayAlt < 0  // sun below horizon
+  const idealNow = isFireworksIdeal(displayAlt)
 
-  // Sun position on arc SVG
   const sunX = (displayMinutes / 1440) * arc.W
-  const sunY = arc.horizonY - Math.max(-30, Math.min(35, displayAlt)) * ((arc.horizonY - 10) / 35)
+  const sunY = arc.altToY(displayAlt)
 
-  // Slider thumb position as % of range (for sunset/dark markers)
-  const sliderRange = Math.max(1, sliderMax - sliderMin)
-  function minsToSliderPct(m: number) {
-    return Math.max(0, Math.min(100, ((m - sliderMin) / sliderRange) * 100))
-  }
+  const minsToSliderPct = (m: number) => Math.max(0, Math.min(100, ((m - sliderMin) / sliderRange) * 100))
 
   // ─── Mutations ──────────────────────────────────────────────────────────────
 
@@ -301,7 +311,7 @@ export default function LightLevels() {
       qc.setQueryData<ScheduleItem[]>(['schedule', event?.id], old =>
         (old ?? []).map(i => i.id === item.id ? { ...i, start_time: minutesToTime(minutes) } : i)
       )
-      setDragTime(null)  // cache now has the new value — safe to clear drag
+      setDragTime(null) // cache holds the new value now — clearing drag won't snap back
       return { prev }
     },
     onError: (_, __, ctx) => {
@@ -340,7 +350,6 @@ export default function LightLevels() {
     onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: ['schedule', event?.id] })
       setAddOpen(false); setAddTitle('')
-      // Auto-select the new item
       const c = created as ScheduleItem
       if (c?.id) setSelectedId(c.id)
       toast('Event added')
@@ -352,22 +361,17 @@ export default function LightLevels() {
   const handleSliderChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setDragTime(Number(e.target.value))
   }, [])
-
   const handleSliderCommit = useCallback(() => {
     if (!selectedItem || dragTime === null) return
     updateTime.mutate({ item: selectedItem, minutes: dragTime })
-    // dragTime cleared inside onMutate after cache is updated
   }, [selectedItem, dragTime, updateTime])
 
-  // ─── Smart timing to slider % (for marker positions) ────────────────────────
+  // ─── Marker positions (slider track only — never on the arc) ─────────────────
 
-  const sunsetPct   = sunsetMinutes != null ? minsToSliderPct(sunsetMinutes) : null
-  const bonfireStartPct = smartTiming.bonfireStart
-    ? minsToSliderPct(smartTiming.bonfireStart.getHours() * 60 + smartTiming.bonfireStart.getMinutes()) : null
-  const bonfireEndPct = smartTiming.bonfireEnd
-    ? minsToSliderPct(smartTiming.bonfireEnd.getHours() * 60 + smartTiming.bonfireEnd.getMinutes()) : null
-  const fireworksPct = smartTiming.fireworksAfter
-    ? minsToSliderPct(smartTiming.fireworksAfter.getHours() * 60 + smartTiming.fireworksAfter.getMinutes()) : null
+  const sunsetPct       = sunsetMinutes != null ? minsToSliderPct(sunsetMinutes) : null
+  const bonfireStartPct = dateToMinutes(smartTiming.bonfireStart) != null ? minsToSliderPct(dateToMinutes(smartTiming.bonfireStart)!) : null
+  const bonfireEndPct   = dateToMinutes(smartTiming.bonfireEnd) != null ? minsToSliderPct(dateToMinutes(smartTiming.bonfireEnd)!) : null
+  const fireworksPct    = dateToMinutes(smartTiming.fireworksAfter) != null ? minsToSliderPct(dateToMinutes(smartTiming.fireworksAfter)!) : null
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
@@ -380,312 +384,235 @@ export default function LightLevels() {
       />
 
       <PageContent>
-        {/* ── Sky Panel ─────────────────────────────────────────────────────── */}
-        <div className="rounded-2xl overflow-hidden" style={skyPanelStyle(displayAlt)}>
-          {/* Selected event chip */}
-          <div className="px-3 pt-3 pb-1 flex items-center gap-2 min-h-[32px]">
-            {selectedItem ? (
-              <>
-                <div className="w-2 h-2 rounded-full bg-fire-400 shadow-[0_0_6px_rgba(232,95,0,0.8)]" />
-                <span className="text-xs font-semibold text-smoke-200">{selectedItem.title}</span>
-                <button onClick={() => setSelectedId(null)} className="text-[10px] text-smoke-500 hover:text-smoke-300 ml-auto tap-highlight-none">✕</button>
-              </>
-            ) : (
-              <span className="text-xs text-smoke-600 italic">Tap an event to set its time</span>
-            )}
-          </div>
+        {/* Centred column so nothing stretches on desktop */}
+        <div className="mx-auto w-full max-w-lg space-y-3">
 
-          {/* Sun arc SVG */}
-          <div className="px-1">
-            <svg viewBox={`0 0 ${arc.W} ${arc.H}`} className="w-full" height={arc.H} preserveAspectRatio="none">
+          {/* ── Sky panel ─────────────────────────────────────────────────── */}
+          <div className="rounded-2xl overflow-hidden border border-white/5" style={skyPanelStyle(displayAlt)}>
+            {/* Selected event chip */}
+            <div className="px-3 pt-3 flex items-center gap-2 min-h-[30px]">
+              {selectedItem ? (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-fire-400 shadow-[0_0_6px_rgba(232,95,0,0.8)]" />
+                  <span className="text-xs font-semibold text-smoke-200 truncate">{selectedItem.title}</span>
+                  <button onClick={() => setSelectedId(null)} className="text-smoke-500 hover:text-smoke-200 ml-auto tap-highlight-none text-sm leading-none">✕</button>
+                </>
+              ) : (
+                <span className="text-xs text-smoke-500 italic">Showing now — tap an event below to set its time</span>
+              )}
+            </div>
+
+            {/* Arc */}
+            <svg viewBox={`0 0 ${arc.W} ${arc.H}`} className="w-full block" style={{ aspectRatio: `${arc.W} / ${arc.H}` }}>
               <defs>
-                <radialGradient id="sunGlow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor={sunEmberColor(displayAlt)} stopOpacity="0.5" />
+                <radialGradient id="emberGlow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%"  stopColor={sunEmberColor(displayAlt)} stopOpacity="0.55" />
+                  <stop offset="55%" stopColor={sunEmberColor(displayAlt)} stopOpacity="0.12" />
                   <stop offset="100%" stopColor={sunEmberColor(displayAlt)} stopOpacity="0" />
                 </radialGradient>
-                <radialGradient id="sunCore" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor={displayAlt > 5 ? '#fff8d0' : sunEmberColor(displayAlt)} />
-                  <stop offset="60%" stopColor={sunEmberColor(displayAlt)} />
-                  <stop offset="100%" stopColor={displayAlt > 0 ? sunEmberColor(displayAlt) : '#220800'} />
+                <radialGradient id="emberCore" cx="50%" cy="45%" r="55%">
+                  <stop offset="0%"  stopColor={displayAlt > 4 ? '#fff4cf' : sunEmberColor(displayAlt)} />
+                  <stop offset="55%" stopColor={sunEmberColor(displayAlt)} />
+                  <stop offset="100%" stopColor={displayAlt > 0 ? sunEmberColor(displayAlt) : '#1c0600'} />
                 </radialGradient>
               </defs>
 
               {/* Horizon */}
-              <line x1={0} y1={arc.horizonY} x2={arc.W} y2={arc.horizonY}
-                stroke="rgba(255,255,255,0.15)" strokeWidth={0.7} />
+              <line x1={0} y1={arc.horizonY} x2={arc.W} y2={arc.horizonY} stroke="rgba(255,255,255,0.13)" strokeWidth={0.6} />
 
-              {/* Arc above horizon */}
-              {arc.path && (
-                <path d={arc.path} fill="none" stroke="rgba(232,95,0,0.3)"
-                  strokeWidth={1.2} strokeDasharray="4 4" />
-              )}
-              {/* Arc below horizon */}
-              {arc.belowPath && (
-                <path d={arc.belowPath} fill="none" stroke="rgba(255,255,255,0.07)"
-                  strokeWidth={1} strokeDasharray="3 6" />
-              )}
+              {/* Sun path (clean — no overlays here) */}
+              {arc.abovePath && <path d={arc.abovePath} fill="none" stroke="rgba(255,150,60,0.35)" strokeWidth={1.4} strokeDasharray="5 5" strokeLinecap="round" />}
+              {arc.belowPath && <path d={arc.belowPath} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={1} strokeDasharray="3 7" strokeLinecap="round" />}
 
-              {/* Smart window highlights on arc */}
-              {/* Bonfire window */}
-              {bonfireStartPct != null && bonfireEndPct != null && (() => {
-                const x1 = (bonfireStartPct / 100) * arc.W
-                const x2 = (bonfireEndPct / 100) * arc.W
-                const y1 = arc.horizonY - Math.max(-30, Math.min(35, getSunAltDeg(sliderMin + (bonfireStartPct / 100) * sliderRange, eventDate, lat, lon))) * ((arc.horizonY - 10) / 35)
-                const y2 = arc.horizonY - Math.max(-30, Math.min(35, getSunAltDeg(sliderMin + (bonfireEndPct / 100) * sliderRange, eventDate, lat, lon))) * ((arc.horizonY - 10) / 35)
-                return <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(200,100,0,0.55)" strokeWidth={3.5} strokeLinecap="round" />
-              })()}
-              {/* Fireworks window */}
-              {fireworksPct != null && (() => {
-                const x1 = (fireworksPct / 100) * arc.W
-                const x2 = arc.W
-                return <line x1={x1} y1={arc.horizonY + 8} x2={x2} y2={arc.horizonY + 8}
-                  stroke="rgba(130,60,180,0.5)" strokeWidth={3} strokeLinecap="round" />
-              })()}
-
-              {/* Sunset marker line */}
-              {sunsetPct != null && (
-                <line x1={(sunsetPct / 100) * arc.W} y1={arc.horizonY - 8}
-                  x2={(sunsetPct / 100) * arc.W} y2={arc.horizonY + 8}
-                  stroke="rgba(255,170,50,0.7)" strokeWidth={1.5} />
-              )}
-
-              {/* Sun glow */}
-              <circle cx={sunX} cy={Math.max(10, Math.min(arc.H - 5, sunY))}
-                r={sunRadius(displayAlt) * 2.5} fill="url(#sunGlow)" />
-              {/* Sun body */}
-              <circle cx={sunX} cy={Math.max(10, Math.min(arc.H - 5, sunY))}
-                r={sunRadius(displayAlt)} fill="url(#sunCore)" />
-            </svg>
-          </div>
-
-          {/* Time + light display */}
-          <div className="text-center py-2">
-            <div className="text-3xl font-bold text-smoke-100 tabular-nums tracking-wide">
-              {minutesToTime(displayMinutes)}
-            </div>
-            <div className="flex items-center justify-center gap-2 mt-1">
-              <span className="text-sm">{phaseLabel(displayAlt)}</span>
-              <span className="text-xs text-smoke-400">{displayLight}% light</span>
-              {isIdealFireworks && (
-                <span className="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/25 px-2 py-0.5 rounded-full">
-                  🎆 ideal for fireworks
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Slider */}
-          {selectedItem && (
-            <div className="px-4 pb-4">
-              {/* Track with phase colors + smart windows */}
-              <div className="relative mb-1" style={{ height: '28px' }}>
-                {/* Colored track */}
-                <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1.5 rounded-full"
-                  style={trackStyle} />
-
-                {/* Bonfire window overlay */}
-                {bonfireStartPct != null && bonfireEndPct != null && (
-                  <div className="absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full"
-                    style={{
-                      left: `${bonfireStartPct}%`,
-                      width: `${bonfireEndPct - bonfireStartPct}%`,
-                      background: 'rgba(200,100,0,0.55)',
-                    }} />
-                )}
-                {/* Fireworks window overlay */}
-                {fireworksPct != null && (
-                  <div className="absolute top-1/2 -translate-y-1/2 h-1.5 rounded-r-full"
-                    style={{
-                      left: `${fireworksPct}%`,
-                      right: 0,
-                      background: 'rgba(130,60,180,0.5)',
-                    }} />
-                )}
-
-                {/* Sunset marker tick */}
-                {sunsetPct != null && (
-                  <div className="absolute top-0 bottom-0 w-px"
-                    style={{ left: `${sunsetPct}%`, background: 'rgba(255,170,50,0.7)' }} />
-                )}
-
-                {/* Range input (transparent track, styled thumb) */}
-                <input
-                  type="range"
-                  min={sliderMin}
-                  max={sliderMax}
-                  step={5}
-                  value={displayMinutes}
-                  onChange={handleSliderChange}
-                  onMouseUp={handleSliderCommit}
-                  onTouchEnd={handleSliderCommit}
-                  className="absolute inset-x-0 top-1/2 -translate-y-1/2 w-full appearance-none bg-transparent cursor-pointer
-                    [&::-webkit-slider-thumb]:appearance-none
-                    [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
-                    [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white
-                    [&::-webkit-slider-thumb]:shadow-[0_0_0_2px_rgba(232,95,0,0.5),0_2px_6px_rgba(0,0,0,0.5)]
-                    [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing
-                    [&::-webkit-slider-track]:h-0 [&::-webkit-slider-track]:bg-transparent
-                    [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5
-                    [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white
-                    [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-grab
-                    [&::-moz-range-track]:h-0 [&::-moz-range-track]:bg-transparent"
-                  style={{ height: '28px', padding: 0, margin: 0 }}
+              {/* Sunset tick on the horizon */}
+              {sunsetMinutes != null && (
+                <line
+                  x1={(sunsetMinutes / 1440) * arc.W} y1={arc.horizonY - 6}
+                  x2={(sunsetMinutes / 1440) * arc.W} y2={arc.horizonY + 6}
+                  stroke="rgba(255,170,60,0.6)" strokeWidth={1.2}
                 />
-              </div>
+              )}
 
-              {/* Phase labels */}
-              <div className="flex justify-between mb-2">
-                <span className="text-[9px] text-smoke-600 uppercase tracking-wider">{minutesToTime(sliderMin)}</span>
-                {sunsetPct != null && (
-                  <span className="text-[9px] text-amber-600/70 uppercase tracking-wider absolute"
-                    style={{ left: `calc(${sunsetPct}% + 16px + 4px)`, position: 'relative' }}>
-                    sunset
-                  </span>
-                )}
-                <span className="text-[9px] text-smoke-600 uppercase tracking-wider">{minutesToTime(sliderMax)}</span>
-              </div>
+              {/* Ember (glow follows the sun, so no muddy fixed smear) */}
+              <circle cx={sunX} cy={sunY} r={sunRadius(displayAlt) * 3} fill="url(#emberGlow)" />
+              <circle cx={sunX} cy={sunY} r={sunRadius(displayAlt)} fill="url(#emberCore)" />
+            </svg>
 
-              {/* Time input */}
-              <div className="flex items-center gap-2">
+            {/* Time readout — the big time IS the editable field */}
+            <div className="text-center px-4 pt-1 pb-2">
+              {selectedItem ? (
                 <input
                   type="time"
+                  step={300}
                   value={minutesToTime(displayMinutes)}
                   onChange={e => {
-                    const m = timeToMinutes(e.target.value)
-                    const clamped = Math.max(sliderMin, Math.min(sliderMax, m))
-                    setDragTime(clamped)
+                    if (!e.target.value) return
+                    setDragTime(Math.max(sliderMin, Math.min(sliderMax, timeToMinutes(e.target.value))))
                   }}
-                  onBlur={() => {
-                    if (selectedItem && dragTime !== null) {
-                      updateTime.mutate({ item: selectedItem, minutes: dragTime })
-                    }
-                  }}
-                  className="bg-white/7 border border-white/10 rounded-xl px-3 py-1.5 text-sm font-semibold
-                    text-smoke-100 tabular-nums focus:outline-none focus:border-fire-400/50
-                    [color-scheme:dark] w-28"
+                  onBlur={handleSliderCommit}
+                  className="bg-transparent text-center text-4xl font-bold text-white tabular-nums tracking-wide
+                    focus:outline-none [color-scheme:dark] mx-auto block w-auto
+                    [&::-webkit-calendar-picker-indicator]:hidden
+                    [&::-webkit-calendar-picker-indicator]:appearance-none"
                 />
-                <span className="text-xs text-smoke-500">
-                  {Math.abs(displayAlt).toFixed(1)}° {displayAlt >= 0 ? 'above' : 'below'} horizon
-                </span>
+              ) : (
+                <div className="text-4xl font-bold text-white tabular-nums tracking-wide">{minutesToTime(displayMinutes)}</div>
+              )}
+              <div className="flex items-center justify-center gap-2 mt-1 flex-wrap">
+                <span className="text-sm">{phaseEmoji(displayAlt)}</span>
+                <span className="text-xs text-smoke-400">{displayLight}% light</span>
+                <span className="text-xs text-smoke-600">·</span>
+                <span className="text-xs text-smoke-500">{Math.abs(displayAlt).toFixed(1)}° {displayAlt >= 0 ? 'above' : 'below'}</span>
+                {idealNow && (
+                  <span className="text-[10px] bg-purple-500/20 text-purple-200 border border-purple-400/25 px-2 py-0.5 rounded-full">
+                    🎆 ideal for fireworks
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Slider (only when an event is selected) */}
+            {selectedItem && (
+              <div className="px-4 pb-4 pt-1">
+                <div className="relative" style={{ height: '24px' }}>
+                  {/* Phase-coloured track */}
+                  <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-2 rounded-full" style={trackStyle} />
+
+                  {/* Bonfire window */}
+                  {bonfireStartPct != null && bonfireEndPct != null && bonfireEndPct > bonfireStartPct && (
+                    <div className="absolute top-1/2 -translate-y-1/2 h-2"
+                      style={{ left: `${bonfireStartPct}%`, width: `${bonfireEndPct - bonfireStartPct}%`, background: 'rgba(232,120,20,0.7)' }} />
+                  )}
+                  {/* Fireworks window */}
+                  {fireworksPct != null && (
+                    <div className="absolute top-1/2 -translate-y-1/2 h-2 rounded-r-full"
+                      style={{ left: `${fireworksPct}%`, right: 0, background: 'rgba(150,70,200,0.6)' }} />
+                  )}
+                  {/* Sunset tick */}
+                  {sunsetPct != null && (
+                    <div className="absolute top-0 bottom-0 w-0.5 rounded-full" style={{ left: `${sunsetPct}%`, background: 'rgba(255,180,70,0.85)' }} />
+                  )}
+
+                  <input
+                    type="range" min={sliderMin} max={sliderMax} step={5}
+                    value={displayMinutes}
+                    onChange={handleSliderChange}
+                    onMouseUp={handleSliderCommit}
+                    onTouchEnd={handleSliderCommit}
+                    className="absolute inset-x-0 top-1/2 -translate-y-1/2 w-full appearance-none bg-transparent cursor-pointer
+                      [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5
+                      [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white
+                      [&::-webkit-slider-thumb]:shadow-[0_0_0_2px_rgba(232,95,0,0.6),0_2px_6px_rgba(0,0,0,0.6)]
+                      [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing
+                      [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full
+                      [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-grab"
+                    style={{ height: '24px' }}
+                  />
+                </div>
+
+                {/* Slider scale labels */}
+                <div className="relative h-3 mt-1">
+                  <span className="absolute left-0 text-[9px] text-smoke-600 uppercase tracking-wider">{minutesToTime(sliderMin)}</span>
+                  {sunsetPct != null && sunsetPct > 12 && sunsetPct < 88 && (
+                    <span className="absolute -translate-x-1/2 text-[9px] text-amber-500/80 uppercase tracking-wider"
+                      style={{ left: `${sunsetPct}%` }}>sunset</span>
+                  )}
+                  <span className="absolute right-0 text-[9px] text-smoke-600 uppercase tracking-wider">{minutesToTime(sliderMax)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Smart timing summary ───────────────────────────────────────── */}
+          {(smartTiming.departBy || smartTiming.bonfireStart || smartTiming.fireworksAfter) && (
+            <div className="grid grid-cols-3 gap-2">
+              <div className="glass-card p-3">
+                <p className="text-[9px] text-fire-400 uppercase tracking-wider font-semibold mb-1">🚶 Depart by</p>
+                <p className="text-base font-bold text-smoke-100 tabular-nums">{fmtDate(smartTiming.departBy)}</p>
+                <p className="text-[10px] text-smoke-500 mt-0.5">{walkMins}m walk · {setupMins}m setup</p>
+              </div>
+              <div className="glass-card p-3">
+                <p className="text-[9px] text-orange-400 uppercase tracking-wider font-semibold mb-1">🔥 Bonfire</p>
+                <p className="text-base font-bold text-smoke-100 tabular-nums">{fmtDate(smartTiming.bonfireStart)}</p>
+                <p className="text-[10px] text-smoke-500 mt-0.5">to {fmtDate(smartTiming.bonfireEnd)}</p>
+              </div>
+              <div className="glass-card p-3">
+                <p className="text-[9px] text-purple-400 uppercase tracking-wider font-semibold mb-1">🎆 Fireworks</p>
+                <p className="text-base font-bold text-smoke-100 tabular-nums">{fmtDate(smartTiming.fireworksAfter)}</p>
+                <p className="text-[10px] text-smoke-500 mt-0.5">full dark</p>
               </div>
             </div>
           )}
-        </div>
 
-        {/* ── Smart timing summary ──────────────────────────────────────────── */}
-        {(smartTiming.departBy || smartTiming.bonfireStart || smartTiming.fireworksAfter) && (
-          <div className="grid grid-cols-3 gap-2">
-            <div className="glass-card p-3">
-              <p className="text-[9px] text-fire-400 uppercase tracking-wider font-semibold mb-1">🚶 Depart by</p>
-              <p className="text-base font-bold text-smoke-100 tabular-nums">{fmtDate(smartTiming.departBy)}</p>
-              <p className="text-[10px] text-smoke-500 mt-0.5">{walkMins} min walk</p>
+          {/* ── Suggested presets ──────────────────────────────────────────── */}
+          {unseeded.length > 0 && (
+            <div>
+              <p className="text-[10px] text-smoke-500 uppercase tracking-wider font-semibold mb-2 px-1">Suggested events</p>
+              <div className="space-y-1.5">
+                {unseeded.map(p => (
+                  <button key={p.title} onClick={() => createItem.mutate({ title: p.title, activityType: p.activity_type })}
+                    disabled={createItem.isPending}
+                    className="w-full text-left glass border border-white/8 rounded-xl px-3 py-2.5 flex items-center justify-between
+                      group hover:border-fire-400/25 active:scale-[0.99] transition-all tap-highlight-none">
+                    <span className="text-sm text-smoke-500 group-hover:text-smoke-300 transition-colors">{p.title}</span>
+                    <span className="text-[11px] text-fire-400/60 group-hover:text-fire-400 transition-colors">+ Add</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="glass-card p-3">
-              <p className="text-[9px] text-orange-400 uppercase tracking-wider font-semibold mb-1">🔥 Bonfire</p>
-              <p className="text-base font-bold text-smoke-100 tabular-nums">{fmtDate(smartTiming.bonfireStart)}</p>
-              <p className="text-[10px] text-smoke-500 mt-0.5">to {fmtDate(smartTiming.bonfireEnd)}</p>
-            </div>
-            <div className="glass-card p-3">
-              <p className="text-[9px] text-purple-400 uppercase tracking-wider font-semibold mb-1">🎆 Fireworks</p>
-              <p className="text-base font-bold text-smoke-100 tabular-nums">after {fmtDate(smartTiming.fireworksAfter)}</p>
-              <p className="text-[10px] text-smoke-500 mt-0.5">sun 18° below</p>
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* ── Suggested presets ─────────────────────────────────────────────── */}
-        {unseeded.length > 0 && (
-          <div>
-            <p className="text-[10px] text-smoke-500 uppercase tracking-wider font-semibold mb-2 px-1">Suggested events</p>
-            <div className="space-y-1.5">
-              {unseeded.map(p => (
-                <button key={p.title} onClick={() => createItem.mutate({ title: p.title, activityType: p.activity_type })}
-                  disabled={createItem.isPending}
-                  className="w-full text-left glass border border-white/8 rounded-xl px-3 py-2.5
-                    flex items-center justify-between group hover:border-fire-400/25
-                    active:scale-[0.99] transition-all tap-highlight-none">
-                  <span className="text-sm text-smoke-500 group-hover:text-smoke-300 transition-colors">{p.title}</span>
-                  <span className="text-[11px] text-fire-400/60 group-hover:text-fire-400 transition-colors">+ Add</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+          {/* ── Events grid ────────────────────────────────────────────────── */}
+          {isLoading ? (
+            <div className="grid grid-cols-2 gap-3">{[1,2,3,4].map(i => <div key={i} className="h-28 rounded-2xl shimmer" />)}</div>
+          ) : sorted.length > 0 && (
+            <div>
+              <p className="text-[10px] text-smoke-500 uppercase tracking-wider font-semibold mb-2 px-1">Events</p>
+              <div className="grid grid-cols-2 gap-3">
+                {sorted.map(item => {
+                  const isSelected = item.id === selectedId
+                  const mins = item.start_time ? timeToMinutes(item.start_time) : null
+                  const alt  = mins != null ? getSunAltDeg(mins, eventDate, lat, lon) : null
+                  const lp   = alt != null ? lightPctFromAlt(alt) : null
+                  const ideal = alt != null && isFireworksIdeal(alt)
 
-        {/* ── Events grid ───────────────────────────────────────────────────── */}
-        {isLoading ? (
-          <div className="grid grid-cols-2 gap-3">
-            {[1,2,3,4].map(i => <div key={i} className="h-28 rounded-2xl shimmer" />)}
-          </div>
-        ) : sorted.length > 0 && (
-          <div>
-            <p className="text-[10px] text-smoke-500 uppercase tracking-wider font-semibold mb-2 px-1">Events</p>
-            <div className="grid grid-cols-2 gap-3">
-              {sorted.map(item => {
-                const isSelected = item.id === selectedId
-                const mins = item.start_time ? timeToMinutes(item.start_time) : null
-                const alt  = mins != null ? getSunAltDeg(mins, eventDate, lat, lon) : null
-                const lp   = alt != null ? lightPctFromAlt(alt) : null
-                const ideal = alt != null && alt < 0
-
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => setSelectedId(isSelected ? null : item.id)}
-                    className={cn(
-                      'glass-card p-3 cursor-pointer active:scale-[0.98] transition-all tap-highlight-none',
-                      isSelected && 'border-fire-400/35 bg-fire-500/6 shadow-[0_0_12px_rgba(232,95,0,0.1)]'
-                    )}
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <span className="text-xl leading-none">
-                        {alt != null ? phaseLabel(alt) : '⏱'}
-                      </span>
-                      <div className="flex gap-0.5">
-                        <button
-                          onClick={e => { e.stopPropagation(); setEditingItem(item); setEditTitle(item.title); setEditOpen(true) }}
-                          className="p-1 text-smoke-600 hover:text-smoke-300 tap-highlight-none transition-colors"
-                        >
-                          <Pencil size={11} />
-                        </button>
-                        <button
-                          onClick={e => { e.stopPropagation(); if (confirm(`Remove "${item.title}"?`)) deleteItem.mutate(item.id) }}
-                          className="p-1 text-smoke-600 hover:text-red-400 tap-highlight-none transition-colors"
-                        >
-                          <Trash2 size={11} />
-                        </button>
+                  return (
+                    <div key={item.id}
+                      onClick={() => setSelectedId(isSelected ? null : item.id)}
+                      className={cn(
+                        'glass-card p-3 cursor-pointer active:scale-[0.98] transition-all tap-highlight-none',
+                        isSelected && 'border-fire-400/40 bg-fire-500/10 shadow-[0_0_14px_rgba(232,95,0,0.12)]'
+                      )}>
+                      <div className="flex items-start justify-between mb-2">
+                        <span className="text-xl leading-none">{alt != null ? phaseEmoji(alt) : '⏱'}</span>
+                        <div className="flex gap-0.5">
+                          <button onClick={e => { e.stopPropagation(); setEditingItem(item); setEditTitle(item.title); setEditOpen(true) }}
+                            className="p-1 text-smoke-600 hover:text-smoke-300 tap-highlight-none transition-colors"><Pencil size={11} /></button>
+                          <button onClick={e => { e.stopPropagation(); if (confirm(`Remove "${item.title}"?`)) deleteItem.mutate(item.id) }}
+                            className="p-1 text-smoke-600 hover:text-red-400 tap-highlight-none transition-colors"><Trash2 size={11} /></button>
+                        </div>
+                      </div>
+                      <p className="text-xs font-semibold text-smoke-200 leading-tight line-clamp-2 mb-2">{item.title}</p>
+                      <div>
+                        {item.start_time
+                          ? <p className="text-sm font-bold text-smoke-100 tabular-nums">{item.start_time}</p>
+                          : <p className="text-xs text-smoke-600 italic">tap to set time</p>}
+                        {lp != null && <p className="text-[10px] text-smoke-500">{lp}% light</p>}
+                        {ideal && (
+                          <span className="text-[9px] bg-purple-500/15 text-purple-200 border border-purple-400/20 px-1.5 py-0.5 rounded-full mt-1 inline-block">🎆 fireworks</span>
+                        )}
                       </div>
                     </div>
-
-                    <p className="text-xs font-semibold text-smoke-200 leading-tight line-clamp-2 mb-2">
-                      {item.title}
-                    </p>
-
-                    <div className="mt-auto">
-                      {item.start_time ? (
-                        <p className="text-sm font-bold text-smoke-100 tabular-nums">{item.start_time}</p>
-                      ) : (
-                        <p className="text-xs text-smoke-600 italic">tap to set time</p>
-                      )}
-                      {lp != null && (
-                        <p className="text-[10px] text-smoke-500">{lp}% light</p>
-                      )}
-                      {ideal && (
-                        <span className="text-[9px] bg-purple-500/15 text-purple-300 border border-purple-500/20 px-1.5 py-0.5 rounded-full mt-1 inline-block">
-                          🎆 fireworks
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {!isLoading && sorted.length === 0 && unseeded.length === 0 && (
-          <div className="text-center py-10 text-smoke-600 text-sm">No events yet — add one above</div>
-        )}
+          {!isLoading && sorted.length === 0 && unseeded.length === 0 && (
+            <div className="text-center py-10 text-smoke-600 text-sm">No events yet — add one above</div>
+          )}
+        </div>
       </PageContent>
 
       {/* Add dialog */}
@@ -693,12 +620,10 @@ export default function LightLevels() {
         <DialogContent>
           <DialogHeader><DialogTitle>Add Event</DialogTitle></DialogHeader>
           <Input value={addTitle} onChange={e => setAddTitle(e.target.value)} placeholder="Event name"
-            onKeyDown={e => e.key === 'Enter' && addTitle.trim() && createItem.mutate({ title: addTitle })}
-            autoFocus />
+            onKeyDown={e => e.key === 'Enter' && addTitle.trim() && createItem.mutate({ title: addTitle })} autoFocus />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button onClick={() => createItem.mutate({ title: addTitle })}
-              disabled={!addTitle.trim() || createItem.isPending}>
+            <Button onClick={() => createItem.mutate({ title: addTitle })} disabled={!addTitle.trim() || createItem.isPending}>
               {createItem.isPending ? 'Adding…' : 'Add'}
             </Button>
           </DialogFooter>
@@ -710,8 +635,7 @@ export default function LightLevels() {
         <DialogContent>
           <DialogHeader><DialogTitle>Rename Event</DialogTitle></DialogHeader>
           <Input value={editTitle} onChange={e => setEditTitle(e.target.value)} placeholder="Event name"
-            onKeyDown={e => e.key === 'Enter' && editTitle.trim() && editingItem && renameItem.mutate({ item: editingItem, title: editTitle })}
-            autoFocus />
+            onKeyDown={e => e.key === 'Enter' && editTitle.trim() && editingItem && renameItem.mutate({ item: editingItem, title: editTitle })} autoFocus />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setEditOpen(false)}>Cancel</Button>
             <Button onClick={() => editingItem && renameItem.mutate({ item: editingItem, title: editTitle })}

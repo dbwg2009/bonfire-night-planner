@@ -36,7 +36,7 @@ export default function Dashboard() {
 
   const accepted = guests.filter(g => g.rsvp_status === 'accepted').length
   const declined = guests.filter(g => g.rsvp_status === 'declined').length
-  const pending = guests.filter(g => g.rsvp_status === 'pending').length
+  const pending = guests.filter(g => g.rsvp_status === 'invited').length
   const completedTasks = tasks.filter(t => t.status === 'completed').length
   const totalTasks = tasks.length
 

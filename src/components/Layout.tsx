@@ -12,7 +12,7 @@ export function Layout({ showNav = true }: LayoutProps) {
   return (
     <div className="relative min-h-dvh min-h-screen flex flex-col">
       <FireBackground />
-      <div className={cn('relative z-10 flex flex-col flex-1', showNav && 'pb-[80px]')}>
+      <div className={cn('relative z-10 flex flex-col flex-1 safe-top', showNav && 'pb-[calc(80px+env(safe-area-inset-bottom,0px))]')}>
         <Outlet />
       </div>
       {showNav && <BottomNav />}

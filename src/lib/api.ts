@@ -142,6 +142,15 @@ export const api = {
   deleteMilestone: (eventId: string, id: string) =>
     request<{ success: boolean }>(`/events/${eventId}/milestones/${id}`, { method: 'DELETE' }),
 
+  // Pickup Slots
+  getPickupSlots: (eventId: string) => request<{ id: string; label: string; sort_order: number }[]>(`/events/${eventId}/pickup-slots`),
+  createPickupSlot: (eventId: string, data: { label: string; sort_order?: number }) =>
+    request<{ id: string; label: string; sort_order: number }>(`/events/${eventId}/pickup-slots`, { method: 'POST', body: JSON.stringify(data) }),
+  updatePickupSlot: (eventId: string, id: string, data: { label: string; sort_order?: number }) =>
+    request<{ id: string; label: string; sort_order: number }>(`/events/${eventId}/pickup-slots/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deletePickupSlot: (eventId: string, id: string) =>
+    request<{ success: boolean }>(`/events/${eventId}/pickup-slots/${id}`, { method: 'DELETE' }),
+
   // Organisers
   getOrganisers: (eventId: string) => request<unknown[]>(`/events/${eventId}/organisers`),
   createOrganiser: (eventId: string, data: unknown) =>

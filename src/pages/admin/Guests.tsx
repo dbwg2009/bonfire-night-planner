@@ -28,7 +28,7 @@ const COMMON_RESTRICTIONS = [
 
 const EMPTY_GUEST: Omit<Guest, 'id' | 'event_id' | 'created_at' | 'updated_at'> = {
   name: '',
-  rsvp_status: 'pending',
+  rsvp_status: 'in_consideration',
   dietary: [],
   dietary_restrictions: [],
   dietary_notes: '',
@@ -43,7 +43,7 @@ export default function Guests() {
   const event = useEventStore(s => s.currentEvent)
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState<'all' | 'accepted' | 'declined' | 'pending'>('all')
+  const [filter, setFilter] = useState<'all' | 'in_consideration' | 'invited' | 'accepted' | 'declined'>('all')
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Guest | null>(null)
   const [form, setForm] = useState(EMPTY_GUEST)
@@ -125,9 +125,10 @@ export default function Guests() {
 
   const counts = {
     all: guests.length,
+    in_consideration: guests.filter(g => g.rsvp_status === 'in_consideration').length,
+    invited: guests.filter(g => g.rsvp_status === 'invited').length,
     accepted: guests.filter(g => g.rsvp_status === 'accepted').length,
     declined: guests.filter(g => g.rsvp_status === 'declined').length,
-    pending: guests.filter(g => g.rsvp_status === 'pending').length
   }
 
   return (
@@ -159,7 +160,7 @@ export default function Guests() {
         </div>
 
         <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1">
-          {(['all', 'accepted', 'pending', 'declined'] as const).map(f => (
+          {(['all', 'in_consideration', 'invited', 'accepted', 'declined'] as const).map(f => (
             <button
               key={f}
               onClick={() => setFilter(f)}
@@ -169,7 +170,7 @@ export default function Guests() {
                   : 'glass border-white/10 text-smoke-400'
               }`}
             >
-              {f.charAt(0).toUpperCase() + f.slice(1)} ({counts[f]})
+              {f === 'all' ? 'All' : f === 'in_consideration' ? 'Considering' : f === 'invited' ? 'Invited' : f === 'accepted' ? 'Accepted' : 'Declined'} ({counts[f]})
             </button>
           ))}
         </div>
@@ -228,7 +229,8 @@ export default function Guests() {
               <Select value={form.rsvp_status} onValueChange={v => setForm(f => ({ ...f, rsvp_status: v as Guest['rsvp_status'] }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="in_consideration">In Consideration</SelectItem>
+                  <SelectItem value="invited">Invited</SelectItem>
                   <SelectItem value="accepted">Accepted</SelectItem>
                   <SelectItem value="declined">Declined</SelectItem>
                 </SelectContent>

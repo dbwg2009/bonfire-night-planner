@@ -53,9 +53,10 @@ export function MilestoneBar({ milestones, totalRaisedPence, compact = false, on
   const raisedGbp = (totalRaisedPence / 100).toFixed(0)
   const maxGbp = (maxAmount / 100).toFixed(0)
 
-  // Even-index milestones sit above the bar, odd-index below (first milestone is above)
-  const aboveIcons = displayed.filter((_, i) => i % 2 === 0)
-  const belowIcons = displayed.filter((_, i) => i % 2 !== 0)
+  // Even-index milestones sit above the bar, odd-index below — last milestone always above
+  const lastIdx = displayed.length - 1
+  const aboveIcons = displayed.filter((_, i) => i % 2 === 0 || i === lastIdx)
+  const belowIcons = displayed.filter((_, i) => i % 2 !== 0 && i !== lastIdx)
 
   return (
     <div className="space-y-3">

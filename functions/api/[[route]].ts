@@ -120,6 +120,22 @@ app.get('/api/public/guest/:id', async (c) => {
   return c.json({ ...guest, dietary: parseJson(guest.dietary as string, []) })
 })
 
+// Returns invited guests for the RSVP name dropdown
+app.get('/api/public/invited-guests/:eventId', async (c) => {
+  const guests = await c.env.DB.prepare(
+    "SELECT id, name FROM guests WHERE event_id = ? AND rsvp_status = 'invited' ORDER BY name"
+  ).bind(c.req.param('eventId')).all()
+  return c.json(guests.results)
+})
+
+// Returns pickup slots for the RSVP form
+app.get('/api/public/pickup-slots/:eventId', async (c) => {
+  const slots = await c.env.DB.prepare(
+    'SELECT id, label FROM pickup_slots WHERE event_id = ? ORDER BY sort_order, label'
+  ).bind(c.req.param('eventId')).all()
+  return c.json(slots.results)
+})
+
 // ─── Status / health (public) ──────────────────────────────────────────────────
 
 const STATUS_COMPONENTS: { key: string; label: string }[] = [
@@ -295,7 +311,7 @@ app.post('/api/events/:eventId/guests', requireAuth(async (c) => {
   const body = await c.req.json()
   await c.env.DB.prepare(
     'INSERT INTO guests (id, name, rsvp_status, dietary, dietary_restrictions, dietary_notes, pickup_time, emergency_contact, on_whatsapp, notes, conflict_event, event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(body.id, body.name, body.rsvp_status ?? 'pending', JSON.stringify(body.dietary ?? []), JSON.stringify(body.dietary_restrictions ?? []), body.dietary_notes ?? '', body.pickup_time ?? '', body.emergency_contact ?? '', body.on_whatsapp ? 1 : 0, body.notes ?? '', body.conflict_event ? 1 : 0, c.req.param('eventId')).run()
+  ).bind(body.id, body.name, body.rsvp_status ?? 'in_consideration', JSON.stringify(body.dietary ?? []), JSON.stringify(body.dietary_restrictions ?? []), body.dietary_notes ?? '', body.pickup_time ?? '', body.emergency_contact ?? '', body.on_whatsapp ? 1 : 0, body.notes ?? '', body.conflict_event ? 1 : 0, c.req.param('eventId')).run()
   const guest = await c.env.DB.prepare('SELECT * FROM guests WHERE id = ?').bind(body.id).first()
   return c.json(mapGuest(guest as Record<string, unknown>))
 }))
@@ -314,14 +330,20 @@ app.delete('/api/events/:eventId/guests/:id', requireAuth(async (c) => {
   return c.json({ success: true })
 }))
 
-// Public RSVP (no auth required)
+// Public RSVP — updates an existing invited guest record
 app.post('/api/events/:eventId/rsvp', async (c) => {
   const body = await c.req.json()
-  const id = crypto.randomUUID()
+  const { guest_id, rsvp_status, dietary, dietary_restrictions, dietary_notes, pickup_time, emergency_contact } = body
+  if (!guest_id) return c.json({ error: 'guest_id required' }, 400)
+  const guest = await c.env.DB.prepare(
+    "SELECT id FROM guests WHERE id = ? AND event_id = ? AND rsvp_status = 'invited'"
+  ).bind(guest_id, c.req.param('eventId')).first()
+  if (!guest) return c.json({ error: 'Guest not found or not invited' }, 404)
+  const newStatus = rsvp_status === 'declined' ? 'declined' : 'accepted'
   await c.env.DB.prepare(
-    'INSERT INTO guests (id, name, rsvp_status, dietary, dietary_restrictions, dietary_notes, pickup_time, emergency_contact, event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(id, body.name, body.rsvp_status ?? 'pending', JSON.stringify(body.dietary ?? []), JSON.stringify(body.dietary_restrictions ?? []), body.dietary_notes ?? '', body.pickup_time ?? '', body.emergency_contact ?? '', c.req.param('eventId')).run()
-  return c.json({ success: true, id })
+    'UPDATE guests SET rsvp_status=?, dietary=?, dietary_restrictions=?, dietary_notes=?, pickup_time=?, emergency_contact=?, updated_at=datetime("now") WHERE id=? AND event_id=?'
+  ).bind(newStatus, JSON.stringify(dietary ?? []), JSON.stringify(dietary_restrictions ?? []), dietary_notes ?? '', pickup_time ?? '', emergency_contact ?? '', guest_id, c.req.param('eventId')).run()
+  return c.json({ success: true })
 })
 
 // ─── Check-ins ─────────────────────────────────────────────────────────────────
@@ -542,6 +564,41 @@ app.put('/api/events/:eventId/conflict-schedule/:id', requireAuth(async (c) => {
 
 app.delete('/api/events/:eventId/conflict-schedule/:id', requireAuth(async (c) => {
   await c.env.DB.prepare('DELETE FROM conflict_schedule WHERE id = ? AND event_id = ?').bind(c.req.param('id'), c.req.param('eventId')).run()
+  return c.json({ success: true })
+}))
+
+// ─── Pickup Slots ──────────────────────────────────────────────────────────────
+
+app.get('/api/events/:eventId/pickup-slots', requireAuth(async (c) => {
+  const slots = await c.env.DB.prepare(
+    'SELECT * FROM pickup_slots WHERE event_id = ? ORDER BY sort_order, label'
+  ).bind(c.req.param('eventId')).all()
+  return c.json(slots.results)
+}))
+
+app.post('/api/events/:eventId/pickup-slots', requireAuth(async (c) => {
+  const body = await c.req.json()
+  const id = crypto.randomUUID()
+  await c.env.DB.prepare(
+    'INSERT INTO pickup_slots (id, event_id, label, sort_order) VALUES (?, ?, ?, ?)'
+  ).bind(id, c.req.param('eventId'), body.label, body.sort_order ?? 0).run()
+  const slot = await c.env.DB.prepare('SELECT * FROM pickup_slots WHERE id = ?').bind(id).first()
+  return c.json(slot)
+}))
+
+app.put('/api/events/:eventId/pickup-slots/:id', requireAuth(async (c) => {
+  const body = await c.req.json()
+  await c.env.DB.prepare(
+    'UPDATE pickup_slots SET label=?, sort_order=? WHERE id=? AND event_id=?'
+  ).bind(body.label, body.sort_order ?? 0, c.req.param('id'), c.req.param('eventId')).run()
+  const slot = await c.env.DB.prepare('SELECT * FROM pickup_slots WHERE id = ?').bind(c.req.param('id')).first()
+  return c.json(slot)
+}))
+
+app.delete('/api/events/:eventId/pickup-slots/:id', requireAuth(async (c) => {
+  await c.env.DB.prepare(
+    'DELETE FROM pickup_slots WHERE id = ? AND event_id = ?'
+  ).bind(c.req.param('id'), c.req.param('eventId')).run()
   return c.json({ success: true })
 }))
 

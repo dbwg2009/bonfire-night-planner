@@ -16,6 +16,11 @@ const DEFAULT_LAT = 51.822
 const DEFAULT_LON = -3.016
 const FIREWORKS_THRESHOLD = 10  // below this % = "ideal for fireworks"
 
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
 function getLightPercent(timeStr: string, date: Date, lat: number, lon: number): number {
   const [h, m] = timeStr.split(':').map(Number)
   const d = new Date(date)
@@ -59,7 +64,7 @@ export default function LightLevels() {
 
   const lat = event?.lat ?? DEFAULT_LAT
   const lon = event?.lon ?? DEFAULT_LON
-  const eventDate = event ? new Date(event.date) : new Date()
+  const eventDate = event ? parseLocalDate(event.date) : new Date()
 
   const { data: items = [], isLoading } = useQuery<ScheduleItem[]>({
     queryKey: ['schedule', event?.id],

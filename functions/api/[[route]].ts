@@ -96,6 +96,14 @@ function mapCheckin(row: Record<string, unknown>) {
   return { ...row, checked_in: row.checked_in === 1 }
 }
 
+// Returns null (clear override), a clamped integer 0-100, or undefined (invalid — caller should 400)
+function sanitiseLightTarget(raw: unknown): null | number | undefined {
+  if (raw === null || raw === undefined || raw === '') return null
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 0 || n > 100) return undefined
+  return Math.round(n)
+}
+
 function mapLocation(row: Record<string, unknown>) {
   return { ...row, pros: parseJson(row.pros as string, []), cons: parseJson(row.cons as string, []), fire_permission: row.fire_permission === 1, fireworks_permission: row.fireworks_permission === 1 }
 }
@@ -407,16 +415,20 @@ app.get('/api/events/:eventId/schedule', requireAuth(async (c) => {
 
 app.post('/api/events/:eventId/schedule', requireAuth(async (c) => {
   const body = await c.req.json()
+  const lightTarget = sanitiseLightTarget(body.light_level_target)
+  if (lightTarget === undefined) return c.json({ error: 'light_level_target must be an integer 0–100' }, 400)
   await c.env.DB.prepare('INSERT INTO schedule_items (id, title, activity_type, start_time, end_time, location, owner, notes, sort_order, light_level_target, event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(body.id, body.title, body.activity_type ?? '', body.start_time ?? '', body.end_time ?? '', body.location ?? '', body.owner ?? '', body.notes ?? '', body.sort_order ?? 0, body.light_level_target ?? null, c.req.param('eventId')).run()
+    .bind(body.id, body.title, body.activity_type ?? '', body.start_time ?? '', body.end_time ?? '', body.location ?? '', body.owner ?? '', body.notes ?? '', body.sort_order ?? 0, lightTarget, c.req.param('eventId')).run()
   const item = await c.env.DB.prepare('SELECT * FROM schedule_items WHERE id = ?').bind(body.id).first()
   return c.json(item)
 }))
 
 app.put('/api/events/:eventId/schedule/:id', requireAuth(async (c) => {
   const body = await c.req.json()
+  const lightTarget = sanitiseLightTarget(body.light_level_target)
+  if (lightTarget === undefined) return c.json({ error: 'light_level_target must be an integer 0–100' }, 400)
   await c.env.DB.prepare('UPDATE schedule_items SET title=?, activity_type=?, start_time=?, end_time=?, location=?, owner=?, notes=?, sort_order=?, light_level_target=? WHERE id=? AND event_id=?')
-    .bind(body.title, body.activity_type ?? '', body.start_time ?? '', body.end_time ?? '', body.location ?? '', body.owner ?? '', body.notes ?? '', body.sort_order ?? 0, body.light_level_target ?? null, c.req.param('id'), c.req.param('eventId')).run()
+    .bind(body.title, body.activity_type ?? '', body.start_time ?? '', body.end_time ?? '', body.location ?? '', body.owner ?? '', body.notes ?? '', body.sort_order ?? 0, lightTarget, c.req.param('id'), c.req.param('eventId')).run()
   const item = await c.env.DB.prepare('SELECT * FROM schedule_items WHERE id = ?').bind(c.req.param('id')).first()
   return c.json(item)
 }))

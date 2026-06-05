@@ -52,7 +52,7 @@ export default function Schedule() {
     enabled: !!event?.id
   })
 
-  const sorted = [...items].sort((a, b) => a.sort_order - b.sort_order || (a.start_time ?? '').localeCompare(b.start_time ?? ''))
+  const sorted = [...items].sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? '') || a.sort_order - b.sort_order)
 
   const save = useMutation({
     mutationFn: async (data: typeof form) => {

@@ -545,7 +545,7 @@ app.delete('/api/events/:eventId/tasks/:id', requireAuth(async (c) => {
 // ─── Schedule ──────────────────────────────────────────────────────────────────
 
 app.get('/api/events/:eventId/schedule', requireAuth(async (c) => {
-  const items = await c.env.DB.prepare('SELECT * FROM schedule_items WHERE event_id = ? ORDER BY sort_order, start_time').bind(c.req.param('eventId')).all()
+  const items = await c.env.DB.prepare('SELECT * FROM schedule_items WHERE event_id = ? ORDER BY start_time, sort_order').bind(c.req.param('eventId')).all()
   return c.json(items.results)
 }))
 

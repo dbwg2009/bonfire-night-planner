@@ -92,7 +92,15 @@
     border-radius: 1rem;
   }
 
+  /* Opaque page-coloured surface for full-screen sheets */
+  .sheet-surface {
+    background: #0a0500;
+  }
+
   @media (prefers-color-scheme: light) {
+    .sheet-surface {
+      background: #faf5f0;
+    }
     .glass {
       background: rgba(255, 255, 255, 0.65);
       backdrop-filter: blur(16px);

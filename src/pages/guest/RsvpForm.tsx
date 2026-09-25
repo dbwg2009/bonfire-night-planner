@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
 import { FireBackground } from '../../components/FireBackground'
+import { GuestNamePicker } from '../../components/GuestNamePicker'
 import { MilestoneBar } from '../../components/MilestoneBar'
 import { Toaster } from '../../components/ui/toast'
 import { toast } from '../../components/ui/toast'
@@ -52,6 +53,22 @@ function storeRsvpGuest(id: string, name: string) {
     localStorage.setItem('rsvp_guest_id', id)
     localStorage.setItem('rsvp_guest_name', name)
   } catch { /* storage blocked */ }
+}
+
+// Digits plus common separators, with an optional leading +, and 7–15 digits in total
+function isPlausiblePhone(value: string) {
+  const trimmed = value.trim()
+  if (!/^\+?[\d\s\-().]+$/.test(trimmed)) return false
+  const digits = trimmed.replace(/\D/g, '').length
+  return digits >= 7 && digits <= 15
+}
+
+function validateEmergencyContact(name: string, phone: string) {
+  const errors: { name?: string; phone?: string } = {}
+  if (!name.trim()) errors.name = 'Please enter a name'
+  if (!phone.trim()) errors.phone = 'Please enter a phone number'
+  else if (!isPlausiblePhone(phone)) errors.phone = "That doesn't look like a phone number"
+  return errors
 }
 
 type PublicEvent = { id: string; name?: string; contribution_link?: string; contribution_match_ratio: number }
@@ -101,8 +118,10 @@ export default function RsvpForm() {
     dietary_restrictions: [] as string[],
     dietary_notes: '',
     pickup_time: '',
-    emergency_contact: ''
   })
+  const [emergencyName, setEmergencyName] = useState('')
+  const [emergencyPhone, setEmergencyPhone] = useState('')
+  const [emergencyErrors, setEmergencyErrors] = useState<{ name?: string; phone?: string }>({})
 
   const toggleRestriction = (value: string) => {
     setForm(f => ({
@@ -141,9 +160,13 @@ export default function RsvpForm() {
   async function submitAccept() {
     if (!selectedGuest) { toast('Please select your name', 'error'); return }
     if (!event?.id) { toast('Event not found', 'error'); return }
+    const errors = validateEmergencyContact(emergencyName, emergencyPhone)
+    setEmergencyErrors(errors)
+    if (errors.name || errors.phone) { toast('Please add an emergency contact', 'error'); return }
+    const emergency_contact = `${emergencyName.trim()} – ${emergencyPhone.trim()}`
     setLoading(true)
     try {
-      const res = await api.submitRsvp(event.id, { guest_id: selectedGuest.id, ...form, rsvp_status: 'accepted' })
+      const res = await api.submitRsvp(event.id, { guest_id: selectedGuest.id, ...form, emergency_contact, rsvp_status: 'accepted' })
       if (res.error) { toast(res.error, 'error'); return }
       setRsvpCookie()
       storeRsvpGuest(selectedGuest.id, selectedGuest.name)
@@ -255,19 +278,7 @@ export default function RsvpForm() {
         <div className="space-y-4">
           <Card>
             <h2 className="text-sm font-semibold text-smoke-300 mb-3">Who are you?</h2>
-            <Select
-              value={selectedGuest?.id ?? ''}
-              onValueChange={id => setSelectedGuest(invitedGuests.find(g => g.id === id) ?? null)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select your name…" />
-              </SelectTrigger>
-              <SelectContent>
-                {invitedGuests.map(g => (
-                  <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <GuestNamePicker guests={invitedGuests} value={selectedGuest} onChange={setSelectedGuest} />
           </Card>
 
           <Card>
@@ -371,13 +382,49 @@ export default function RsvpForm() {
               )}
 
               <Card className="animate-slide-up">
-                <h2 className="text-sm font-semibold text-smoke-300 mb-1">Emergency contact</h2>
-                <Input
-                  value={form.emergency_contact}
-                  onChange={e => setForm(f => ({ ...f, emergency_contact: e.target.value }))}
-                  placeholder="+44 7700 000000"
-                  type="tel"
-                />
+                <h2 className="text-sm font-semibold text-smoke-300 mb-3">
+                  Emergency contact <span className="text-fire-400" aria-hidden="true">*</span>
+                </h2>
+                <div className="space-y-3">
+                  <div>
+                    <label htmlFor="emergency-name" className="text-xs text-smoke-400 mb-1 block">Name</label>
+                    <Input
+                      id="emergency-name"
+                      value={emergencyName}
+                      onChange={e => { setEmergencyName(e.target.value); setEmergencyErrors(er => ({ ...er, name: undefined })) }}
+                      placeholder="e.g. Sam (Mum)"
+                      autoComplete="off"
+                      required
+                      aria-required="true"
+                      aria-invalid={!!emergencyErrors.name}
+                      aria-describedby={emergencyErrors.name ? 'emergency-name-error' : undefined}
+                      className={emergencyErrors.name ? 'ring-2 ring-red-400/50 focus:ring-red-400/50' : undefined}
+                    />
+                    {emergencyErrors.name && (
+                      <p id="emergency-name-error" className="text-xs text-red-400 mt-1">{emergencyErrors.name}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label htmlFor="emergency-phone" className="text-xs text-smoke-400 mb-1 block">Phone number</label>
+                    <Input
+                      id="emergency-phone"
+                      value={emergencyPhone}
+                      onChange={e => { setEmergencyPhone(e.target.value); setEmergencyErrors(er => ({ ...er, phone: undefined })) }}
+                      placeholder="+44 7700 000000"
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="off"
+                      required
+                      aria-required="true"
+                      aria-invalid={!!emergencyErrors.phone}
+                      aria-describedby={emergencyErrors.phone ? 'emergency-phone-error' : undefined}
+                      className={emergencyErrors.phone ? 'ring-2 ring-red-400/50 focus:ring-red-400/50' : undefined}
+                    />
+                    {emergencyErrors.phone && (
+                      <p id="emergency-phone-error" className="text-xs text-red-400 mt-1">{emergencyErrors.phone}</p>
+                    )}
+                  </div>
+                </div>
               </Card>
 
               <Button

@@ -219,6 +219,16 @@ export interface MilestonesResponse {
   total_raised: number  // in pence
 }
 
+export interface McpToken {
+  id: string
+  label: string
+  token_hint: string       // last 4 characters, to tell tokens apart
+  organiser_id: string
+  organiser_name: string | null
+  created_at: string
+  last_used_at: string | null
+}
+
 export interface ApiResponse<T> {
   data?: T
   error?: string

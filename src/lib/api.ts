@@ -1,5 +1,5 @@
 import { useAuthStore } from '../store/auth'
-import type { Milestone, MilestonesResponse } from './types'
+import type { McpToken, Milestone, MilestonesResponse } from './types'
 
 const BASE = '/api'
 
@@ -170,5 +170,12 @@ export const api = {
   updateOrganiser: (eventId: string, id: string, data: unknown) =>
     request<unknown>(`/events/${eventId}/organisers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteOrganiser: (eventId: string, id: string) =>
-    request<unknown>(`/events/${eventId}/organisers/${id}`, { method: 'DELETE' })
+    request<unknown>(`/events/${eventId}/organisers/${id}`, { method: 'DELETE' }),
+
+  // Claude (MCP) connector tokens — owner only
+  getMcpTokens: (eventId: string) => request<McpToken[]>(`/events/${eventId}/mcp-tokens`),
+  createMcpToken: (eventId: string, label: string) =>
+    request<McpToken & { token: string; url: string }>(`/events/${eventId}/mcp-tokens`, { method: 'POST', body: JSON.stringify({ label }) }),
+  deleteMcpToken: (eventId: string, id: string) =>
+    request<{ success: boolean }>(`/events/${eventId}/mcp-tokens/${id}`, { method: 'DELETE' })
 }

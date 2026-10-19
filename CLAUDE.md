@@ -87,6 +87,12 @@ npm run db:migrate:status   # verify: should report nothing left to apply
 - Persist only validated/normalised values to D1. Validate inputs (ranges, formats, ordering) before every `DB.prepare().bind().run()` call.
 - Raw SQL prepared statements are the pattern — do not introduce an ORM without discussion.
 
+### Claude MCP connector
+- Stateless MCP server (hand-rolled JSON-RPC over Streamable HTTP) at `POST /api/mcp/<token>` (or `/api/mcp` + `Authorization: Bearer <token>`). Code lives in `server/mcp/` (outside `functions/` so Pages routing ignores it).
+- Owners create/revoke tokens in **Settings → Connect Claude** (`api_tokens` table, SHA-256 hashed, no expiry). A token acts as its organiser with their *current* DB permissions.
+- Every tool calls the existing REST route in-process (`ctx.call`), so validation and permission checks live in one place. **When you add or change a REST route, add/update the matching tool in `server/mcp/tools.ts`.**
+- Token management routes are never reachable via an MCP token (`via: 'mcp'` JWT claim).
+
 ---
 
 ## Frontend architecture

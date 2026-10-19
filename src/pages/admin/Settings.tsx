@@ -8,6 +8,7 @@ import { Input } from '../../components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../../components/ui/dialog'
 import { Switch } from '../../components/ui/switch'
 import { PageHeader, PageContent } from '../../components/Layout'
+import { ClaudeConnectCard } from '../../components/ClaudeConnectCard'
 import { useEventStore } from '../../store/event'
 import { useAuthStore } from '../../store/auth'
 import { api } from '../../lib/api'
@@ -357,6 +358,12 @@ export default function Settings() {
             )}
           </Card>
         ))}
+
+        {organiser?.is_owner && event?.id && (
+          <div className="pt-2">
+            <ClaudeConnectCard eventId={event.id} />
+          </div>
+        )}
 
       </PageContent>
 

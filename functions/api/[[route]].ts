@@ -2,6 +2,8 @@ import { Hono } from 'hono'
 import { handle } from 'hono/cloudflare-pages'
 import { cors } from 'hono/cors'
 import { sign, verify } from 'hono/jwt'
+import { handleMcpBody } from '../../server/mcp/protocol'
+import type { HttpMethod, McpContext } from '../../server/mcp/context'
 
 interface Env {
   DB: D1Database
@@ -404,6 +406,7 @@ app.delete('/api/events/:id', requireAuth(async (c, org) => {
     c.env.DB.prepare('DELETE FROM organisers WHERE event_id = ?').bind(id),
     c.env.DB.prepare('DELETE FROM events WHERE id = ?').bind(id),
   ])
+  await deleteApiTokens(c.env, 'event_id', id)
   return c.json({ success: true })
 }))
 
@@ -794,8 +797,149 @@ app.put('/api/events/:eventId/organisers/:id', requireAuth(async (c, org) => {
 app.delete('/api/events/:eventId/organisers/:id', requireAuth(async (c, org) => {
   if (!org.is_owner) return c.json({ error: 'Forbidden' }, 403)
   await c.env.DB.prepare('DELETE FROM organisers WHERE id = ? AND event_id = ?').bind(c.req.param('id'), c.req.param('eventId')).run()
+  await deleteApiTokens(c.env, 'organiser_id', c.req.param('id'))
   return c.json({ success: true })
 }))
+
+// ─── Claude MCP connector ──────────────────────────────────────────────────────
+//
+// Owners create long-lived tokens in Settings; Claude connects to
+// /api/mcp/<token> (claude.ai can't send custom headers) or /api/mcp with
+// `Authorization: Bearer <token>`. Each MCP tool runs the matching REST route
+// above in-process as the token's organiser, so validation + permissions match
+// the app exactly. Only a SHA-256 of each token is stored.
+
+async function sha256Hex(value: string): Promise<string> {
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+function generateApiToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32))
+  const b64 = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  return `bnp_${b64}`
+}
+
+// Best effort: tokens of a deleted organiser/event already fail the auth join,
+// so a missing api_tokens table (migration 0012 not yet applied) must not break deletes.
+async function deleteApiTokens(env: Env, column: 'event_id' | 'organiser_id', id: string) {
+  try {
+    await env.DB.prepare(`DELETE FROM api_tokens WHERE ${column} = ?`).bind(id).run()
+  } catch { /* table missing — nothing to clean up */ }
+}
+
+// Token management is owner-only and never reachable through an MCP token itself.
+async function requireTokenAdmin(c: any, org: any): Promise<Response | null> {
+  if (org.via === 'mcp') return c.json({ error: 'Claude tokens cannot manage Claude tokens' }, 403)
+  if (org.event_id !== c.req.param('eventId')) return c.json({ error: 'Forbidden' }, 403)
+  // Re-check ownership against the DB — the login JWT can be up to 30 days old.
+  const row = await c.env.DB.prepare('SELECT is_owner FROM organisers WHERE id = ? AND event_id = ?')
+    .bind(org.id, org.event_id).first()
+  if (!row || row.is_owner !== 1) return c.json({ error: 'Only owners can manage Claude connections' }, 403)
+  return null
+}
+
+const API_TOKEN_COLUMNS = 't.id, t.label, t.token_hint, t.created_at, t.last_used_at, t.organiser_id, o.name AS organiser_name'
+
+app.get('/api/events/:eventId/mcp-tokens', requireAuth(async (c, org) => {
+  const denied = await requireTokenAdmin(c, org)
+  if (denied) return denied
+  const rows = await c.env.DB.prepare(
+    `SELECT ${API_TOKEN_COLUMNS} FROM api_tokens t LEFT JOIN organisers o ON o.id = t.organiser_id WHERE t.event_id = ? ORDER BY t.created_at DESC`
+  ).bind(c.req.param('eventId')).all()
+  return c.json(rows.results)
+}))
+
+app.post('/api/events/:eventId/mcp-tokens', requireAuth(async (c, org) => {
+  const denied = await requireTokenAdmin(c, org)
+  if (denied) return denied
+  const body = await c.req.json().catch(() => ({}))
+  const label = typeof body.label === 'string' && body.label.trim() ? body.label.trim().slice(0, 60) : 'Claude'
+  const token = generateApiToken()
+  const id = crypto.randomUUID()
+  await c.env.DB.prepare(
+    'INSERT INTO api_tokens (id, event_id, organiser_id, label, token_hash, token_hint) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(id, c.req.param('eventId'), org.id, label, await sha256Hex(token), token.slice(-4)).run()
+  const row = await c.env.DB.prepare(
+    `SELECT ${API_TOKEN_COLUMNS} FROM api_tokens t LEFT JOIN organisers o ON o.id = t.organiser_id WHERE t.id = ?`
+  ).bind(id).first()
+  // The plaintext token / URL is returned exactly once and never stored.
+  return c.json({ ...row, token, url: `${new URL(c.req.url).origin}/api/mcp/${token}` })
+}))
+
+app.delete('/api/events/:eventId/mcp-tokens/:id', requireAuth(async (c, org) => {
+  const denied = await requireTokenAdmin(c, org)
+  if (denied) return denied
+  await c.env.DB.prepare('DELETE FROM api_tokens WHERE id = ? AND event_id = ?')
+    .bind(c.req.param('id'), c.req.param('eventId')).run()
+  return c.json({ success: true })
+}))
+
+async function mcpHandler(c: any) {
+  if (c.req.method !== 'POST') {
+    // Stateless server: no SSE stream (GET) and no sessions to end (DELETE).
+    return c.json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: 'Method not allowed — POST JSON-RPC messages to this URL' } }, 405, { Allow: 'POST' })
+  }
+
+  const auth = c.req.header('Authorization')
+  const raw: string | undefined = c.req.param('token') ?? (auth?.startsWith('Bearer ') ? auth.slice(7) : undefined)
+  if (!raw) return c.json({ error: 'Missing Claude connector token' }, 401)
+
+  const row = await c.env.DB.prepare(
+    'SELECT t.id AS token_id, o.id, o.name, o.event_id, o.is_owner, o.permissions FROM api_tokens t JOIN organisers o ON o.id = t.organiser_id AND o.event_id = t.event_id WHERE t.token_hash = ?'
+  ).bind(await sha256Hex(raw)).first()
+  if (!row) return c.json({ error: 'Invalid or revoked Claude connector token' }, 401)
+
+  let execCtx: ExecutionContext | undefined
+  try { execCtx = c.executionCtx } catch { execCtx = undefined }
+
+  // Record usage, throttled so a burst of tool calls doesn't write on every request.
+  const touch = c.env.DB.prepare(
+    "UPDATE api_tokens SET last_used_at = datetime('now') WHERE id = ? AND (last_used_at IS NULL OR last_used_at < datetime('now', '-5 minutes'))"
+  ).bind(row.token_id).run().catch(() => {})
+  if (execCtx) execCtx.waitUntil(touch); else await touch
+
+  const organiser = {
+    id: row.id as string,
+    name: row.name as string,
+    is_owner: row.is_owner === 1,
+    permissions: parseJson<Record<string, boolean>>(row.permissions as string, {})
+  }
+  // Short-lived JWT carrying the organiser's *current* DB permissions.
+  const jwt = await sign(
+    { ...organiser, event_id: row.event_id, via: 'mcp', exp: Math.floor(Date.now() / 1000) + 300 },
+    getSecret(c.env), JWT_ALG
+  )
+  const origin = new URL(c.req.url).origin
+
+  const ctx: McpContext = {
+    eventId: row.event_id as string,
+    origin,
+    organiser,
+    async call(method: HttpMethod, path: string, body?: unknown) {
+      const res = await app.fetch(new Request(`${origin}/api${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body)
+      }), c.env, execCtx)
+      const data = await res.json().catch(() => null)
+      return { ok: res.ok, status: res.status, data }
+    }
+  }
+
+  let message: unknown
+  try {
+    message = await c.req.json()
+  } catch {
+    return c.json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400)
+  }
+  const response = await handleMcpBody(message, ctx)
+  if (response === null) return c.body(null, 202)
+  return c.json(response)
+}
+
+app.all('/api/mcp', mcpHandler)
+app.all('/api/mcp/:token', mcpHandler)
 
 // ─── Weather proxy (keeps API keys server-side) ────────────────────────────────
 
